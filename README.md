@@ -14,6 +14,10 @@
   Featuring native Windows Media Transport integration, real-time synchronized karaoke lyrics, interactive cyberpunk mecha mascot, browser-bridged YouTube ad skipping, and deep Win32 working-set RAM optimization.
 </p>
 
+<p align="center">
+  <img src="assets/preview_lyrics.png" alt="SysNotch Dynamic Island with Synced Lyrics" width="760" />
+</p>
+
 ---
 
 ## 🌟 Highlights
@@ -53,6 +57,32 @@
 
 ---
 
+## 📸 Visual Showcase
+
+<div align="center">
+
+### 1. Minimalist Camera Pill (Collapsed Mode)
+*Living center clock with system network, battery, and CPU load monitors.*  
+<br/>
+<img src="assets/preview_compact.png" alt="SysNotch Compact Notch Mode" width="280" />
+<br/><br/>
+
+### 2. Media Dashboard (Expanded Hub)
+*Full playback controls, dynamic audio visualizer, seekbar, and volume controls.*  
+<br/>
+<img src="assets/preview_media.png" alt="SysNotch Media Hub Mode" width="520" />
+<br/><br/>
+
+### 3. Synchronized Karaoke Lyrics (Side-Drawer)
+*Zero-cut 2-line word wrapping, buttery smooth scroll, and Spotify-style typography.*  
+<br/>
+<img src="assets/preview_lyrics.png" alt="SysNotch 2-Line Synced Lyrics" width="760" />
+<br/>
+
+</div>
+
+---
+
 ## 🚀 Features in Detail
 
 ### 1. 🎛️ Dynamic Multi-Tab Dashboard
@@ -61,6 +91,12 @@
 - **Worm-Dot Page Indicator:** Elastic pagination dot that fluidly elongates into a pill during tab transitions before snapping into the target indicator.
 
 ### 2. 🤖 Interactive Mascot Companion
+
+<p align="center">
+  <img src="assets/mascot_robot.png" alt="Cyberpunk Robot Mascot Head" width="160" /><br>
+  <em>Vector-rendered Cyberpunk Mecha Skull Android with smooth gaze and mechanical blinks.</em>
+</p>
+
 - 100% Vector QPainter drawing (zero bitmap loss at any scale or DPI).
 - Dual-optic cybernetic eyes: Electric Cyan (`#00F5FF`) on the left, Neon Magenta (`#FF007F`) on the right.
 - High-definition ambient outer neon shield with dynamic breathing pulse.
