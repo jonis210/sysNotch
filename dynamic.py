@@ -1774,96 +1774,86 @@ class DesktopDynamicIsland(QWidget):
             return
 
         current_float = getattr(self, "lyrics_smooth_index", 0.0)
-        # Active line is precisely centered in the island height
         center_y = panel_y + (panel_h / 2.0)
-        line_height = 29.0
-        line_box_h = 24.0
+        avail_w = max(10.0, panel_w - 20.0)
+        spacing = 8.0
 
-        min_idx = max(0, int(math.floor(current_float - 3.5)))
-        max_idx = min(len(self.lyrics_cues), int(math.ceil(current_float + 4.5)))
+        min_idx = max(0, int(math.floor(current_float - 3.0)))
+        max_idx = min(len(self.lyrics_cues), int(math.ceil(current_float + 4.0)))
 
+        cue_metrics = {}
         for idx in range(min_idx, max_idx):
             cue = self.lyrics_cues[idx]
             raw_text = cue[1].strip()
             is_instrumental = not raw_text or raw_text in ("♪", "♫", "♩", "♪   ♪   ♪", "(instrumental)", "[instrumental]")
             text = "♪" if is_instrumental else raw_text
-
             diff = idx - current_float
-            line_y = center_y + (diff * line_height) - (line_box_h / 2.0)
-
-            # Proximity to center: 1.0 when active, dropping smoothly to 0.0
-            proximity = max(0.0, 1.0 - abs(diff) * 0.40)
-            proximity_eased = proximity ** 1.6
-
-            # Spotify Typography:
-            # Active line: bold, large font, pure crisp white (#FFFFFF)
-            # Inactive lines: muted slate/silver (#748398), slightly smaller
+            prox = max(0.0, 1.0 - abs(diff) * 0.40)
+            prox_eased = prox ** 1.6
+            weight = QFont.Weight.Bold if prox > 0.65 else (QFont.Weight.DemiBold if prox > 0.35 else QFont.Weight.Medium)
             font_family = "Segoe UI Symbol" if is_instrumental else "Segoe UI"
-            base_font_size = (11.0 + (3.0 * proximity_eased)) if is_instrumental else (9.2 + (2.6 * proximity_eased))
-            weight = (
-                QFont.Weight.Bold
-                if proximity > 0.65
-                else (QFont.Weight.DemiBold if proximity > 0.35 else QFont.Weight.Medium)
-            )
+            f_size = (11.0 + (3.0 * prox_eased)) if is_instrumental else (9.8 if prox > 0.65 else 8.8)
+            font = _font(font_family, f_size, weight)
+            fm = QFontMetricsF(font)
 
-            text_rect = QRectF(panel_x + 8.0, line_y, panel_w - 24.0, line_box_h)
-            avail_w = max(10.0, text_rect.width())
+            if is_instrumental:
+                cue_metrics[idx] = (20.0, 1, font, text, prox, prox_eased)
+            else:
+                single_w = fm.horizontalAdvance(text)
+                if single_w <= avail_w:
+                    cue_metrics[idx] = (20.0, 1, font, text, prox, prox_eased)
+                else:
+                    br = fm.boundingRect(QRectF(0, 0, avail_w, 200), int(Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignLeft), text)
+                    lines = max(1, min(2, int(round(br.height() / max(1.0, fm.lineSpacing())))))
+                    box_h = max(20.0, br.height() + 2.0)
+                    cue_metrics[idx] = (box_h, lines, font, text, prox, prox_eased)
 
-            # Adaptive Font Auto-Fit: If active line is long, dynamically scale font size
-            # down so that the entire line fits naturally on a single line.
-            font_size = base_font_size
-            if not is_instrumental and proximity > 0.2:
-                tentative_font = _font(font_family, font_size, weight)
-                tentative_w = QFontMetricsF(tentative_font).horizontalAdvance(text)
-                if tentative_w > avail_w:
-                    fit_ratio = (avail_w - 4.0) / tentative_w
-                    font_size = max(8.8, font_size * fit_ratio)
+        # Compute relative cumulative vertical offsets relative to floor(current_float)
+        base_k = int(math.floor(current_float))
+        rel_y = {base_k: 0.0}
+        for idx in range(base_k + 1, max_idx):
+            prev_h = cue_metrics.get(idx - 1, (20.0,))[0]
+            cur_h = cue_metrics.get(idx, (20.0,))[0]
+            rel_y[idx] = rel_y[idx - 1] + (prev_h + cur_h) / 2.0 + spacing
 
-            painter.setFont(_font(font_family, font_size, weight))
-            fm = painter.fontMetrics()
-            rendered_w = fm.horizontalAdvance(text)
+        for idx in range(base_k - 1, min_idx - 1, -1):
+            next_h = cue_metrics.get(idx + 1, (20.0,))[0]
+            cur_h = cue_metrics.get(idx, (20.0,))[0]
+            rel_y[idx] = rel_y[idx + 1] - (next_h + cur_h) / 2.0 - spacing
+
+        # Continuous interpolated camera scroll between cues
+        frac = current_float - base_k
+        next_offset = rel_y.get(base_k + 1, rel_y[base_k] + 28.0)
+        scroll_y = rel_y[base_k] + (next_offset - rel_y[base_k]) * frac
+
+        for idx in range(min_idx, max_idx):
+            if idx not in cue_metrics:
+                continue
+            h_box, lines, font, text, prox, prox_eased = cue_metrics[idx]
+
+            cue_center_y = center_y + (rel_y[idx] - scroll_y)
+            cue_top_y = cue_center_y - (h_box / 2.0)
 
             # Edge fade calculation (smooth fade out at top and bottom margins)
-            line_center_y = line_y + (line_box_h / 2.0)
-            edge_dist = min(line_center_y - (panel_y + 12.0), (panel_y + panel_h - 12.0) - line_center_y)
+            edge_dist = min(cue_center_y - (panel_y + 12.0), (panel_y + panel_h - 12.0) - cue_center_y)
             edge_fade = max(0.0, min(1.0, edge_dist / 24.0))
 
             base_color = QColor(114, 130, 150)
             active_color = QColor(255, 255, 255)
-            text_color = _interpolate_color(base_color, active_color, proximity_eased)
-
-            # Combined proximity + edge fade alpha
-            alpha = int(255 * (0.28 + 0.72 * proximity_eased) * edge_fade)
+            text_color = _interpolate_color(base_color, active_color, prox_eased)
+            alpha = int(255 * (0.28 + 0.72 * prox_eased) * edge_fade)
             text_color.setAlpha(alpha)
 
+            painter.setFont(font)
             painter.setPen(text_color)
-            align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
 
-            # Fallback Smooth Ping-Pong Marquee: If ultra-long line still exceeds width even at minimum font size
-            if rendered_w > avail_w and proximity > 0.75 and not is_instrumental:
-                overflow = rendered_w - avail_w
-                period = 6.0
-                p = (time.monotonic() % period) / period
-                if p < 0.25:
-                    progress = 0.0
-                elif p < 0.50:
-                    sub = (p - 0.25) / 0.25
-                    progress = 0.5 * (1.0 - math.cos(math.pi * sub))
-                elif p < 0.75:
-                    progress = 1.0
-                else:
-                    sub = (p - 0.75) / 0.25
-                    progress = 0.5 * (1.0 + math.cos(math.pi * sub))
-                scroll_x = -progress * overflow
-
-                painter.save()
-                painter.setClipRect(text_rect, Qt.ClipOperation.IntersectClip)
-                draw_rect = QRectF(text_rect.left() + scroll_x, text_rect.top(), rendered_w + 10.0, text_rect.height())
-                painter.drawText(draw_rect, align, text)
-                painter.restore()
+            draw_rect = QRectF(panel_x + 8.0, cue_top_y, avail_w, h_box)
+            if lines > 1:
+                flags = int(Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                painter.drawText(draw_rect, flags, text)
             else:
-                elided = fm.elidedText(text, Qt.TextElideMode.ElideRight, max(1, int(avail_w)))
-                painter.drawText(text_rect, align, elided)
+                align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+                painter.drawText(draw_rect, align, text)
 
         painter.restore()
 
