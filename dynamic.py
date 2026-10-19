@@ -636,8 +636,8 @@ class DesktopDynamicIsland(QWidget):
             max(180.0, min(360.0, float(screen_w - 24))),
         )
         self.lyrics_expanded_w = min(
-            float(self.canvas_w),
-            max(500.0, min(840.0, float(screen_w - 24))),
+            float(self.canvas_w - 72.0),
+            680.0,
         )
         self.lyrics_open = False
         self.expanded_h = 144.0
@@ -2274,9 +2274,15 @@ class DesktopDynamicIsland(QWidget):
         return max(420.0, min(max_w, desired_w))
 
     def _calculate_dynamic_lyrics_width(self, now: float) -> float:
-        """Dynamically compute the total island width to hug the active synchronized lyric line."""
+        """
+        Dynamically compute an aesthetic, well-proportioned island width for lyrics.
+        Enforces safe bounds (max 680px, strictly inside canvas bounds with >= 36px margin)
+        to guarantee that the concave Bezier ears and rounded bottom corners are never clipped into a box.
+        """
         base_w = self.expanded_w
-        screen_w = QApplication.primaryScreen().availableGeometry().width()
+        safe_canvas_max = float(self.canvas_w - 72.0)
+        max_total_w = min(680.0, safe_canvas_max)
+        max_panel_w = max(200.0, max_total_w - base_w - 16.0)
 
         if self.lyrics_cues:
             target_cue = bisect.bisect_right(
@@ -2289,14 +2295,14 @@ class DesktopDynamicIsland(QWidget):
             if is_instrumental:
                 active_w = 40.0
             else:
-                lyric_font = _font("Segoe UI", 12.0, QFont.Weight.Bold)
+                lyric_font = _font("Segoe UI", 11.0, QFont.Weight.Bold)
                 active_w = QFontMetricsF(lyric_font).horizontalAdvance(active_text)
         else:
             active_w = 120.0
 
-        max_panel_w = min(500.0, max(180.0, float(screen_w - base_w - 48)))
-        panel_desired_w = max(180.0, min(max_panel_w, active_w + 48.0))
-        return min(float(screen_w - 24), base_w + 16.0 + panel_desired_w)
+        min_panel_w = min(220.0, max_panel_w)
+        panel_desired_w = max(min_panel_w, min(max_panel_w, active_w + 36.0))
+        return min(max_total_w, base_w + 16.0 + panel_desired_w)
 
     def _update_system_stats(self, now: float):
         if now - self._last_stats_time < 1.8:
