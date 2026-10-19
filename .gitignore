@@ -1,0 +1,48 @@
+# ==========================================
+# SysNotch / Dynamic Island - .gitignore
+# ==========================================
+
+# --- Virtual Environments ---
+.venv/
+venv/
+ENV/
+env/
+
+# --- Python Bytecode & Cache ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# --- PyInstaller Build Outputs ---
+build/
+dist/
+*.manifest
+
+# --- Binary Executables & Distribution Archives ---
+# (Disarankan di-upload ke menu 'Releases' di GitHub agar repo tetap cepat saat di-clone)
+*.exe
+*.zip
+
+# --- Diagnostic & Log Files ---
+*.log
+crash_log.txt
+
+# --- Windows System Files ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# --- Code Editor & IDE Configurations ---
+.vscode/
+.idea/
+*.suo
+*.user
+*.sublime-project
+*.sublime-workspace
+
+# --- Temporary Scratch Files ---
+scratch/
+debug_*.py
+test_*.py
