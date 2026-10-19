@@ -46,6 +46,16 @@ def main():
         # Ensure default branch is main
         run_git(["branch", "-M", "main"])
 
+    # Ensure Git User Identity is set (required for commit)
+    _, user_name, _ = run_git(["config", "user.name"])
+    _, user_email, _ = run_git(["config", "user.email"])
+    if not user_name:
+        run_git(["config", "user.name", "jonis210"])
+        print("[V] Mengatur git user.name ke: jonis210")
+    if not user_email:
+        run_git(["config", "user.email", "jonis210@users.noreply.github.com"])
+        print("[V] Mengatur git user.email ke: jonis210@users.noreply.github.com")
+
     # 3. Check remote origin
     code, remote_url, _ = run_git(["remote", "get-url", "origin"])
     if code != 0 or not remote_url:
