@@ -5248,7 +5248,8 @@ class DesktopDynamicIsland(QWidget):
             btn_hit_h = 50.0
             btn_y = (h - btn_hit_h) / 2.0
             self.btn_tab_previous_rect = QRectF(x + 2.0, btn_y, btn_hit_w, btn_hit_h)
-            self.btn_tab_next_rect = QRectF(x + w - 2.0 - btn_hit_w, btn_y, btn_hit_w, btn_hit_h)
+            nav_w = min(self.expanded_w, w) if (self.lyrics_open and self.is_spotify_active and w > self.expanded_w) else w
+            self.btn_tab_next_rect = QRectF(x + nav_w - 2.0 - btn_hit_w, btn_y, btn_hit_w, btn_hit_h)
 
             header_center_y = 70.0  # Mathematically & optically centered between top status bar (y=26) and bottom controls (y=114)
             margin = 16.0
@@ -5318,6 +5319,10 @@ class DesktopDynamicIsland(QWidget):
             media_left = x + margin
             is_lyrics_expanded = self.lyrics_open and self.is_spotify_active and (w > self.expanded_w)
             media_w_area = 360.0 if is_lyrics_expanded else (w - margin * 2.0)
+            if is_lyrics_expanded:
+                dots_center_x = (self.canvas_w - w) / 2.0 + (self.expanded_w / 2.0)
+            else:
+                dots_center_x = self.canvas_w / 2.0
 
             # =========================================================================
             # CASE A: PROFILE MODE (NO MEDIA DETECTED - SNUG 124px)
@@ -5525,25 +5530,10 @@ class DesktopDynamicIsland(QWidget):
                 ctrl_y = 116.0
                 row_h = 26.0
                 cy_row = ctrl_y + (row_h / 2.0)
+                media_right = media_left + media_w_area
 
-                # 5a. Lyrics Button (Left)
-                if self.is_spotify_active:
-                    self.btn_lyrics_rect = QRectF(media_left, ctrl_y, 26.0, 26.0)
-                    lyrics_active = self.lyrics_open
-                    lyr_hover_t = self.btn_hover_anim.get("lyrics", 0.0)
-                    bg_col = QColor(56, 189, 248, int(40 + 20 * lyr_hover_t)) if lyrics_active else QColor(255, 255, 255, int(12 + 16 * lyr_hover_t))
-                    border_col = QColor(56, 189, 248, int(180 + 40 * lyr_hover_t)) if lyrics_active else QColor(255, 255, 255, int(20 + 25 * lyr_hover_t))
-                    note_col = QColor("#38BDF8") if lyrics_active else _interpolate_color(QColor("#E2E8F0"), QColor("#FFFFFF"), lyr_hover_t)
-                    painter.setBrush(QBrush(bg_col))
-                    painter.setPen(QPen(border_col, 0.8))
-                    painter.drawRoundedRect(self.btn_lyrics_rect, 7.5, 7.5)
-                    self._draw_vector_lyrics_note(painter, self.btn_lyrics_rect.center().x(), cy_row, note_col)
-                    vol_group_x = self.btn_lyrics_rect.right() + 8.0
-                else:
-                    self.btn_lyrics_rect = QRectF()
-                    vol_group_x = media_left
-
-                # 5b. Speaker Icon + Volume Slider Capsule [ 🔈 ═════●───── ]
+                # 5a. Speaker Icon + Volume Slider Capsule [ 🔈 ═════●───── ] (FAR LEFT)
+                vol_group_x = media_left
                 vol_group_w = 112.0
                 self.vol_group_rect = QRectF(vol_group_x, ctrl_y, vol_group_w, 26.0)
                 self.btn_speaker_rect = QRectF(vol_group_x, ctrl_y, 30.0, 26.0)
@@ -5602,11 +5592,27 @@ class DesktopDynamicIsland(QWidget):
                 painter.setPen(QPen(QColor(56, 189, 248, 200), 1.0))
                 painter.drawEllipse(QPointF(vol_track_x + vol_val_w, cy_row), 3.5, 3.5)
 
-                # 5c. Transport Controls or YouTube Skip Ad
+                # 5b. Lyrics Button (FAR RIGHT)
+                if self.is_spotify_active:
+                    lyr_w = 26.0
+                    self.btn_lyrics_rect = QRectF(media_right - lyr_w, ctrl_y, lyr_w, 26.0)
+                    lyrics_active = self.lyrics_open
+                    lyr_hover_t = self.btn_hover_anim.get("lyrics", 0.0)
+                    bg_col = QColor(56, 189, 248, int(40 + 20 * lyr_hover_t)) if lyrics_active else QColor(255, 255, 255, int(12 + 16 * lyr_hover_t))
+                    border_col = QColor(56, 189, 248, int(180 + 40 * lyr_hover_t)) if lyrics_active else QColor(255, 255, 255, int(20 + 25 * lyr_hover_t))
+                    note_col = QColor("#38BDF8") if lyrics_active else _interpolate_color(QColor("#E2E8F0"), QColor("#FFFFFF"), lyr_hover_t)
+                    painter.setBrush(QBrush(bg_col))
+                    painter.setPen(QPen(border_col, 0.8))
+                    painter.drawRoundedRect(self.btn_lyrics_rect, 7.5, 7.5)
+                    self._draw_vector_lyrics_note(painter, self.btn_lyrics_rect.center().x(), cy_row, note_col)
+                else:
+                    self.btn_lyrics_rect = QRectF()
+
+                # 5c. Transport Controls or YouTube Skip Ad (CENTERED OVER DOT INDICATORS)
                 skip_ready = self.youtube_ad_detected and self.youtube_can_skip
                 if skip_ready:
                     skip_width = min(126.0, max(92.0, media_w_area * 0.30))
-                    self.btn_skip_ad_rect = QRectF(media_left + media_w_area - skip_width, ctrl_y, skip_width, 26.0)
+                    self.btn_skip_ad_rect = QRectF(media_right - skip_width, ctrl_y, skip_width, 26.0)
                     self.btn_prev_rect = QRectF()
                     self.btn_play_rect = QRectF()
                     self.btn_next_rect = QRectF()
@@ -5634,12 +5640,13 @@ class DesktopDynamicIsland(QWidget):
                     painter.drawText(QRectF(self.btn_skip_ad_rect.left() + 24.0, ctrl_y, skip_width - 28.0, 26.0), Qt.AlignmentFlag.AlignCenter, "Skip iklan")
                 else:
                     self.btn_skip_ad_rect = QRectF()
-                    media_right = media_left + media_w_area
-                    next_w = 26.0
-                    self.btn_next_rect = QRectF(media_right - next_w, ctrl_y, next_w, 26.0)
-                    play_cx = self.btn_next_rect.left() - 8.0 - 14.0
+                    play_cx = dots_center_x
                     self.btn_play_rect = QRectF(play_cx - 14.0, cy_row - 14.0, 28.0, 28.0)
-                    self.btn_prev_rect = QRectF(self.btn_play_rect.left() - 8.0 - 26.0, ctrl_y, 26.0, 26.0)
+                    prev_w = 26.0
+                    next_w = 26.0
+                    ctrl_gap = 8.0
+                    self.btn_prev_rect = QRectF(self.btn_play_rect.left() - ctrl_gap - prev_w, ctrl_y, prev_w, 26.0)
+                    self.btn_next_rect = QRectF(self.btn_play_rect.right() + ctrl_gap, ctrl_y, next_w, 26.0)
                     prev_cx = self.btn_prev_rect.center().x()
                     next_cx = self.btn_next_rect.center().x()
 
