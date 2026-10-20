@@ -33,6 +33,20 @@ def get_local_ip() -> str:
         return '127.0.0.1'
 
 
+def get_dir_size(path: str) -> int:
+    """Calculate total size of a directory in bytes."""
+    total = 0
+    try:
+        for entry in os.scandir(path):
+            if entry.is_file(follow_symlinks=False):
+                total += entry.stat().st_size
+            elif entry.is_dir(follow_symlinks=False):
+                total += get_dir_size(entry.path)
+    except Exception:
+        pass
+    return total
+
+
 def format_size(bytes_val: int) -> str:
     """Convert bytes into clean human-readable size."""
     if bytes_val < 1024:
@@ -134,39 +148,75 @@ class TeleportServer:
 class VaultItem:
     def __init__(self, path: str):
         self.path = os.path.abspath(path)
-        self.name = os.path.basename(path)
-        self.ext = os.path.splitext(self.name)[1].lower()
-        self.size_bytes = os.path.getsize(self.path) if os.path.exists(self.path) else 0
+        self.is_dir = os.path.isdir(self.path)
+        self.name = os.path.basename(self.path) or os.path.basename(os.path.dirname(self.path)) or self.path
+        self.ext = "" if self.is_dir else os.path.splitext(self.name)[1].lower()
+        if self.is_dir:
+            self.size_bytes = get_dir_size(self.path)
+            self.category = "folder"
+        else:
+            self.size_bytes = os.path.getsize(self.path) if os.path.exists(self.path) else 0
+            self.category = get_file_category(self.ext)
         self.size_str = format_size(self.size_bytes)
-        self.category = get_file_category(self.ext)
         self.created_at = time.time()
         self.id = f"{abs(hash(self.path))}_{int(self.created_at)}"
         
         self.thumbnail: Optional[QPixmap] = None
-        self._load_thumbnail()
+        self.system_icon: Optional[QPixmap] = None
+        self._load_icon_and_thumbnail()
 
         # Teleport QR state
         self.teleport_server: Optional[TeleportServer] = None
         self.teleport_url: str = ""
         self.teleport_qr: Optional[QPixmap] = None
+        self.temp_zip: Optional[str] = None
         self.feedback_copied_until: float = 0.0
 
-    def _load_thumbnail(self):
+    def _load_icon_and_thumbnail(self):
+        # 1. If image, generate crisp high-resolution photo thumbnail
         if self.category == "image" and os.path.exists(self.path):
             try:
                 pm = QPixmap(self.path)
                 if not pm.isNull():
                     self.thumbnail = pm.scaled(
-                        36, 36,
+                        64, 64,
                         Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                         Qt.TransformationMode.SmoothTransformation
                     )
             except Exception:
                 self.thumbnail = None
 
+        # 2. Extract high-resolution Windows Shell System Icon (Works for 100% of files & folders!)
+        try:
+            from PyQt6.QtWidgets import QFileIconProvider
+            from PyQt6.QtCore import QFileInfo
+            provider = QFileIconProvider()
+            ico = provider.icon(QFileInfo(self.path))
+            pm = ico.pixmap(64, 64)
+            if not pm.isNull():
+                self.system_icon = pm
+        except Exception:
+            self.system_icon = None
+
     def start_teleport(self) -> str:
         if not self.teleport_server or not self.teleport_server.is_running:
-            self.teleport_server = TeleportServer(self.path)
+            target_to_serve = self.path
+            if self.is_dir:
+                try:
+                    temp_dir = tempfile.gettempdir()
+                    zip_path = os.path.join(temp_dir, f"{self.name}_{int(time.time())}.zip")
+                    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                        for root, _, files in os.walk(self.path):
+                            for f in files:
+                                full_p = os.path.join(root, f)
+                                rel_p = os.path.relpath(full_p, os.path.dirname(self.path))
+                                z.write(full_p, arcname=rel_p)
+                    self.temp_zip = zip_path
+                    target_to_serve = zip_path
+                except Exception:
+                    target_to_serve = self.path
+
+            self.teleport_server = TeleportServer(target_to_serve)
             self.teleport_url = self.teleport_server.start()
             if HAS_QRCODE:
                 self.teleport_qr = generate_qr_pixmap(self.teleport_url)
@@ -178,6 +228,12 @@ class VaultItem:
             self.teleport_server = None
             self.teleport_url = ""
             self.teleport_qr = None
+        if self.temp_zip and os.path.exists(self.temp_zip):
+            try:
+                os.remove(self.temp_zip)
+            except Exception:
+                pass
+            self.temp_zip = None
 
 
 def generate_qr_pixmap(url: str, size: int = 100) -> Optional[QPixmap]:
