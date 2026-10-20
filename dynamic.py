@@ -2173,12 +2173,9 @@ class DesktopDynamicIsland(QWidget):
     @staticmethod
     def _draw_animated_speaker_icon(painter, cx: float, cy: float, level: float, pulse: float = 0.0, is_mute: bool = False, color: QColor = QColor("#CBD5E1")):
         """
-        Renders the dynamic animated speaker icon:
-        - level == 0 or is_mute: Speaker + micro cross (✕)
-        - 0 < level <= 0.33: Speaker + 1 wave
-        - 0.33 < level <= 0.66: Speaker + 2 waves
-        - level > 0.66: Speaker + 3 waves
-        - pulse: scale punch / ripple wave animation factor
+        Renders the dynamic animated speaker icon with refined proportions:
+        - Clean padding from capsule edge
+        - Soundwaves scaled to fit elegantly within the capsule without clipping
         """
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -2190,18 +2187,18 @@ class DesktopDynamicIsland(QWidget):
             painter.translate(-cx, -cy)
 
         # 1. Speaker Cone Body
-        cone_w = 4.0
-        cone_h = 6.0
-        flare_w = 4.5
-        flare_h = 12.0
+        cone_w = 3.5
+        cone_h = 4.8
+        flare_w = 3.8
+        flare_h = 9.2
 
         body = QPainterPath()
-        body.moveTo(cx - 7.5, cy - cone_h / 2.0)
-        body.lineTo(cx - 7.5 + cone_w, cy - cone_h / 2.0)
-        body.lineTo(cx - 7.5 + cone_w + flare_w, cy - flare_h / 2.0)
-        body.lineTo(cx - 7.5 + cone_w + flare_w, cy + flare_h / 2.0)
-        body.lineTo(cx - 7.5 + cone_w, cy + cone_h / 2.0)
-        body.lineTo(cx - 7.5, cy + cone_h / 2.0)
+        body.moveTo(cx - 6.5, cy - cone_h / 2.0)
+        body.lineTo(cx - 6.5 + cone_w, cy - cone_h / 2.0)
+        body.lineTo(cx - 6.5 + cone_w + flare_w, cy - flare_h / 2.0)
+        body.lineTo(cx - 6.5 + cone_w + flare_w, cy + flare_h / 2.0)
+        body.lineTo(cx - 6.5 + cone_w, cy + cone_h / 2.0)
+        body.lineTo(cx - 6.5, cy + cone_h / 2.0)
         body.closeSubpath()
 
         painter.setPen(Qt.PenStyle.NoPen)
@@ -2210,18 +2207,18 @@ class DesktopDynamicIsland(QWidget):
 
         # 2. Soundwaves / Mute State
         if is_mute or level <= 0.001:
-            painter.setPen(QPen(QColor("#F87171"), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-            cross_cx = cx + 5.0
-            painter.drawLine(QPointF(cross_cx - 3.2, cy - 3.2), QPointF(cross_cx + 3.2, cy + 3.2))
-            painter.drawLine(QPointF(cross_cx - 3.2, cy + 3.2), QPointF(cross_cx + 3.2, cy - 3.2))
+            painter.setPen(QPen(QColor("#F87171"), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            cross_cx = cx + 4.5
+            painter.drawLine(QPointF(cross_cx - 2.5, cy - 2.5), QPointF(cross_cx + 2.5, cy + 2.5))
+            painter.drawLine(QPointF(cross_cx - 2.5, cy + 2.5), QPointF(cross_cx + 2.5, cy - 2.5))
         else:
             painter.setBrush(Qt.BrushStyle.NoBrush)
             w1_alpha = min(255, int(255 * min(1.0, level / 0.33)))
             w1_col = QColor(color.red(), color.green(), color.blue(), w1_alpha)
             painter.setPen(QPen(w1_col, 1.3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
             wave1 = QPainterPath()
-            wave1.arcMoveTo(QRectF(cx + 1.0, cy - 4.5, 5.0, 9.0), -45)
-            wave1.arcTo(QRectF(cx + 1.0, cy - 4.5, 5.0, 9.0), -45, 90)
+            wave1.arcMoveTo(QRectF(cx + 1.2, cy - 3.2, 3.6, 6.4), -45)
+            wave1.arcTo(QRectF(cx + 1.2, cy - 3.2, 3.6, 6.4), -45, 90)
             painter.drawPath(wave1)
 
             if level > 0.33:
@@ -2229,8 +2226,8 @@ class DesktopDynamicIsland(QWidget):
                 w2_col = QColor(color.red(), color.green(), color.blue(), w2_alpha)
                 painter.setPen(QPen(w2_col, 1.3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
                 wave2 = QPainterPath()
-                wave2.arcMoveTo(QRectF(cx + 3.5, cy - 7.5, 7.5, 15.0), -50)
-                wave2.arcTo(QRectF(cx + 3.5, cy - 7.5, 7.5, 15.0), -50, 100)
+                wave2.arcMoveTo(QRectF(cx + 3.2, cy - 5.2, 5.2, 10.4), -50)
+                wave2.arcTo(QRectF(cx + 3.2, cy - 5.2, 5.2, 10.4), -50, 100)
                 painter.drawPath(wave2)
 
             if level > 0.66:
@@ -2238,13 +2235,65 @@ class DesktopDynamicIsland(QWidget):
                 w3_col = QColor(color.red(), color.green(), color.blue(), w3_alpha)
                 painter.setPen(QPen(w3_col, 1.3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
                 wave3 = QPainterPath()
-                wave3.arcMoveTo(QRectF(cx + 6.0, cy - 10.5, 10.0, 21.0), -55)
-                wave3.arcTo(QRectF(cx + 6.0, cy - 10.5, 10.0, 21.0), -55, 110)
+                wave3.arcMoveTo(QRectF(cx + 5.2, cy - 7.2, 6.8, 14.4), -55)
+                wave3.arcTo(QRectF(cx + 5.2, cy - 7.2, 6.8, 14.4), -55, 110)
                 painter.drawPath(wave3)
 
         painter.restore()
 
     @staticmethod
+    def _draw_vector_prev(painter, cx: float, cy: float, col: QColor):
+        """Draw clean, antialiased vector previous button (bar + left triangle)."""
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(col))
+        painter.drawRoundedRect(QRectF(cx - 5.5, cy - 4.5, 1.8, 9.0), 0.6, 0.6)
+        tri = QPainterPath()
+        tri.moveTo(cx + 5.0, cy - 4.5)
+        tri.lineTo(cx - 3.2, cy)
+        tri.lineTo(cx + 5.0, cy + 4.5)
+        tri.closeSubpath()
+        painter.drawPath(tri)
+        painter.restore()
+
+    @staticmethod
+    def _draw_vector_next(painter, cx: float, cy: float, col: QColor):
+        """Draw clean, antialiased vector next button (right triangle + bar)."""
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(col))
+        tri = QPainterPath()
+        tri.moveTo(cx - 5.0, cy - 4.5)
+        tri.lineTo(cx + 3.2, cy)
+        tri.lineTo(cx - 5.0, cy + 4.5)
+        tri.closeSubpath()
+        painter.drawPath(tri)
+        painter.drawRoundedRect(QRectF(cx + 3.7, cy - 4.5, 1.8, 9.0), 0.6, 0.6)
+        painter.restore()
+
+    @staticmethod
+    def _draw_vector_play_pause(painter, cx: float, cy: float, is_playing: bool, col: QColor):
+        """Draw optically balanced play triangle or symmetrical pause bars."""
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(col))
+        if is_playing:
+            p1 = QRectF(cx - 3.8, cy - 5.0, 2.6, 10.0)
+            p2 = QRectF(cx + 1.2, cy - 5.0, 2.6, 10.0)
+            painter.drawRoundedRect(p1, 0.8, 0.8)
+            painter.drawRoundedRect(p2, 0.8, 0.8)
+        else:
+            tri = QPainterPath()
+            tri.moveTo(cx - 3.2, cy - 5.5)
+            tri.lineTo(cx + 6.4, cy)
+            tri.lineTo(cx - 3.2, cy + 5.5)
+            tri.closeSubpath()
+            painter.drawPath(tri)
+        painter.restore()
+
     def _draw_volume_icon(painter, rect: QRectF, increase: bool, color: QColor):
         """Draw SF Symbol speaker with crisp hairline plus/minus indicator."""
         cx, cy = rect.center().x(), rect.center().y()
@@ -4961,17 +5010,19 @@ class DesktopDynamicIsland(QWidget):
                 painter.drawText(QRectF(media_left, seek_y + 4.0, 50.0, 14.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.format_time(display_pos))
                 painter.drawText(QRectF(media_left + seek_w - 50.0, seek_y + 4.0, 50.0, 14.0), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, self.format_time(dur))
 
-                # 5. Bottom Row: Controls & Volume Slider (ctrl_y = 117.0)
-                ctrl_y = 117.0
+                # 5. Bottom Row: Controls & Volume Slider (ctrl_y = 116.0, unified centerline y=129.0)
+                ctrl_y = 116.0
+                row_h = 26.0
+                cy_row = ctrl_y + (row_h / 2.0)
 
                 # 5a. Lyrics Button (Left)
                 if self.is_spotify_active:
-                    self.btn_lyrics_rect = QRectF(media_left, ctrl_y, 25.0, 25.0)
+                    self.btn_lyrics_rect = QRectF(media_left, ctrl_y, 26.0, 26.0)
                     lyrics_active = self.lyrics_open
                     painter.setBrush(QBrush(QColor(56, 189, 248, 40) if lyrics_active else QColor(255, 255, 255, 12)))
                     painter.setPen(QPen(QColor(56, 189, 248, 180) if lyrics_active else QColor(255, 255, 255, 20), 0.8))
-                    painter.drawRoundedRect(self.btn_lyrics_rect, 7.0, 7.0)
-                    painter.setFont(_font("Segoe UI", 9.5, QFont.Weight.DemiBold))
+                    painter.drawRoundedRect(self.btn_lyrics_rect, 7.5, 7.5)
+                    painter.setFont(_font("Segoe UI Symbol", 9.5, QFont.Weight.Bold))
                     painter.setPen(QColor("#38BDF8") if lyrics_active else QColor("#E2E8F0"))
                     painter.drawText(self.btn_lyrics_rect, Qt.AlignmentFlag.AlignCenter, "♫")
                     vol_group_x = self.btn_lyrics_rect.right() + 8.0
@@ -4980,13 +5031,13 @@ class DesktopDynamicIsland(QWidget):
                     vol_group_x = media_left
 
                 # 5b. Speaker Icon + Volume Slider Capsule [ 🔈 ═════●───── ]
-                vol_group_w = 100.0
-                self.vol_group_rect = QRectF(vol_group_x, ctrl_y, vol_group_w, 25.0)
-                self.btn_speaker_rect = QRectF(vol_group_x, ctrl_y, 24.0, 25.0)
+                vol_group_w = 112.0
+                self.vol_group_rect = QRectF(vol_group_x, ctrl_y, vol_group_w, 26.0)
+                self.btn_speaker_rect = QRectF(vol_group_x, ctrl_y, 30.0, 26.0)
 
-                vol_track_x = vol_group_x + 24.0
-                vol_track_w = 68.0
-                vol_track_y = ctrl_y + 11.0
+                vol_track_x = vol_group_x + 32.0
+                vol_track_w = 70.0
+                vol_track_y = ctrl_y + 11.5
                 self.vol_track_rect = QRectF(vol_track_x, vol_track_y, vol_track_w, 3.0)
 
                 # Capsule Background
@@ -4994,7 +5045,7 @@ class DesktopDynamicIsland(QWidget):
                 slider_hovered = self.hovered_btn == "volume_slider" or getattr(self, "is_dragging_volume", False)
                 painter.setBrush(QBrush(QColor(255, 255, 255, 18 if (speaker_hovered or slider_hovered) else 11)))
                 painter.setPen(QPen(QColor(255, 255, 255, 16), 0.8))
-                painter.drawRoundedRect(self.vol_group_rect, 7.0, 7.0)
+                painter.drawRoundedRect(self.vol_group_rect, 7.5, 7.5)
 
                 if not getattr(self, "is_dragging_volume", False):
                     self.current_volume_scalar = self.audio_controller.get_volume()
@@ -5004,14 +5055,14 @@ class DesktopDynamicIsland(QWidget):
                 is_muted = getattr(self, "is_audio_muted", False)
                 vol_pulse = getattr(self, "volume_pulse", 0.0)
 
-                # Draw Animated Speaker Icon
+                # Draw Animated Speaker Icon (Clean 6.5px left padding, elegant waves)
                 speaker_col = QColor("#F87171") if (is_muted or cur_vol <= 0.001) else (
                     _interpolate_color(QColor("#94A3B8"), QColor("#FFFFFF"), 1.0 if speaker_hovered else 0.0)
                 )
                 self._draw_animated_speaker_icon(
                     painter,
-                    self.btn_speaker_rect.center().x() - 1.0,
-                    self.btn_speaker_rect.center().y(),
+                    vol_group_x + 13.0,
+                    cy_row,
                     0.0 if is_muted else cur_vol,
                     pulse=vol_pulse,
                     is_mute=is_muted,
@@ -5033,16 +5084,16 @@ class DesktopDynamicIsland(QWidget):
                     painter.setBrush(QBrush(vol_fill_grad))
                     painter.drawRoundedRect(QRectF(vol_track_x, vol_track_y, vol_val_w, 3.0), 1.5, 1.5)
 
-                # Thumb
+                # Thumb (centered at cy_row, clean cushion from right capsule border)
                 painter.setBrush(QBrush(QColor("#FFFFFF")))
                 painter.setPen(QPen(QColor(56, 189, 248, 200), 1.0))
-                painter.drawEllipse(QPointF(vol_track_x + vol_val_w, vol_track_y + 1.5), 3.8, 3.8)
+                painter.drawEllipse(QPointF(vol_track_x + vol_val_w, cy_row), 3.5, 3.5)
 
                 # 5c. Transport Controls or YouTube Skip Ad
                 skip_ready = self.youtube_ad_detected and self.youtube_can_skip
                 if skip_ready:
                     skip_width = min(126.0, max(92.0, media_w_area * 0.30))
-                    self.btn_skip_ad_rect = QRectF(media_left + media_w_area - skip_width, ctrl_y, skip_width, 25.0)
+                    self.btn_skip_ad_rect = QRectF(media_left + media_w_area - skip_width, ctrl_y, skip_width, 26.0)
                     self.btn_prev_rect = QRectF()
                     self.btn_play_rect = QRectF()
                     self.btn_next_rect = QRectF()
@@ -5053,51 +5104,48 @@ class DesktopDynamicIsland(QWidget):
                     skip_border = QColor(255, 255, 255, 60) if not skip_stale else QColor(100, 95, 80)
                     painter.setPen(QPen(skip_border, 1.0))
                     painter.setBrush(QBrush(skip_bg))
-                    painter.drawRoundedRect(self.btn_skip_ad_rect, 12.5, 12.5)
+                    painter.drawRoundedRect(self.btn_skip_ad_rect, 13.0, 13.0)
 
                     skip_icon = QPainterPath()
-                    skip_icon.moveTo(self.btn_skip_ad_rect.left() + 10.0, ctrl_y + 7.0)
-                    skip_icon.lineTo(self.btn_skip_ad_rect.left() + 17.0, ctrl_y + 12.5)
-                    skip_icon.lineTo(self.btn_skip_ad_rect.left() + 10.0, ctrl_y + 18.0)
+                    skip_icon.moveTo(self.btn_skip_ad_rect.left() + 10.0, ctrl_y + 7.5)
+                    skip_icon.lineTo(self.btn_skip_ad_rect.left() + 17.0, ctrl_y + 13.0)
+                    skip_icon.lineTo(self.btn_skip_ad_rect.left() + 10.0, ctrl_y + 18.5)
                     skip_icon.closeSubpath()
                     painter.setPen(Qt.PenStyle.NoPen)
                     skip_text_color = QColor("#090D16" if not skip_stale else "#2A261C")
                     painter.setBrush(QBrush(skip_text_color))
                     painter.drawPath(skip_icon)
-                    painter.drawRoundedRect(QRectF(self.btn_skip_ad_rect.left() + 19.0, ctrl_y + 7.0, 2.0, 11.0), 1.0, 1.0)
+                    painter.drawRoundedRect(QRectF(self.btn_skip_ad_rect.left() + 19.0, ctrl_y + 7.5, 2.0, 11.0), 1.0, 1.0)
                     painter.setPen(skip_text_color)
                     painter.setFont(_font("Segoe UI", 7.8, QFont.Weight.Bold))
-                    painter.drawText(QRectF(self.btn_skip_ad_rect.left() + 24.0, ctrl_y, skip_width - 28.0, 25.0), Qt.AlignmentFlag.AlignCenter, "Skip iklan")
+                    painter.drawText(QRectF(self.btn_skip_ad_rect.left() + 24.0, ctrl_y, skip_width - 28.0, 26.0), Qt.AlignmentFlag.AlignCenter, "Skip iklan")
                 else:
                     self.btn_skip_ad_rect = QRectF()
-                    play_cx = media_left + media_w_area - 46.0
-                    prev_cx = play_cx - 36.0
-                    next_cx = play_cx + 36.0
+                    media_right = media_left + media_w_area
+                    next_w = 26.0
+                    self.btn_next_rect = QRectF(media_right - next_w, ctrl_y, next_w, 26.0)
+                    play_cx = self.btn_next_rect.left() - 8.0 - 14.0
+                    self.btn_play_rect = QRectF(play_cx - 14.0, cy_row - 14.0, 28.0, 28.0)
+                    self.btn_prev_rect = QRectF(self.btn_play_rect.left() - 8.0 - 26.0, ctrl_y, 26.0, 26.0)
+                    prev_cx = self.btn_prev_rect.center().x()
+                    next_cx = self.btn_next_rect.center().x()
 
-                    self.btn_prev_rect = QRectF(prev_cx - 12.0, ctrl_y, 24.0, 25.0)
-                    self.btn_play_rect = QRectF(play_cx - 14.0, ctrl_y - 2.0, 28.0, 28.0)
-                    self.btn_next_rect = QRectF(next_cx - 12.0, ctrl_y, 24.0, 25.0)
-
-                    # Prev
+                    # Prev Vector
                     prev_t = self.btn_hover_anim.get("prev", 0.0)
-                    painter.setFont(_font("Segoe UI Symbol", 10.5, QFont.Weight.Bold))
-                    painter.setPen(_interpolate_color(QColor("#CBD5E1"), QColor("#FFFFFF"), prev_t) if self.can_previous else QColor(148, 163, 184, 70))
-                    painter.drawText(self.btn_prev_rect, Qt.AlignmentFlag.AlignCenter, "⏮")
+                    prev_col = _interpolate_color(QColor("#CBD5E1"), QColor("#FFFFFF"), prev_t) if self.can_previous else QColor(148, 163, 184, 70)
+                    self._draw_vector_prev(painter, prev_cx, cy_row, prev_col)
 
                     # Play / Pause Hero White Circle
                     play_t = self.btn_hover_anim.get("play", 0.0)
                     painter.setBrush(QBrush(_interpolate_color(QColor("#F8FAFC"), QColor("#FFFFFF"), play_t)))
                     painter.setPen(QPen(QColor(255, 255, 255, 70), 0.8))
                     painter.drawEllipse(self.btn_play_rect)
-                    painter.setPen(QColor("#0F172A"))
-                    painter.setFont(_font("Segoe UI Symbol", 11.0, QFont.Weight.Bold))
-                    painter.drawText(self.btn_play_rect, Qt.AlignmentFlag.AlignCenter, "⏸" if self.is_playing else "▶")
+                    self._draw_vector_play_pause(painter, play_cx, cy_row, self.is_playing, QColor("#0F172A"))
 
-                    # Next
+                    # Next Vector
                     next_t = self.btn_hover_anim.get("next", 0.0)
-                    painter.setFont(_font("Segoe UI Symbol", 10.5, QFont.Weight.Bold))
-                    painter.setPen(_interpolate_color(QColor("#CBD5E1"), QColor("#FFFFFF"), next_t) if self.can_next else QColor(148, 163, 184, 70))
-                    painter.drawText(self.btn_next_rect, Qt.AlignmentFlag.AlignCenter, "⏭")
+                    next_col = _interpolate_color(QColor("#CBD5E1"), QColor("#FFFFFF"), next_t) if self.can_next else QColor(148, 163, 184, 70)
+                    self._draw_vector_next(painter, next_cx, cy_row, next_col)
 
             # =========================================================================
             # CASE C: LYRICS SIDE DRAWER (WHEN w > self.expanded_w)
