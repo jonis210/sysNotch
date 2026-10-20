@@ -117,6 +117,7 @@ from PyQt6.QtGui import (
     QRadialGradient,
     QFontMetricsF,
     QPolygonF,
+    QTransform,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -2292,6 +2293,45 @@ class DesktopDynamicIsland(QWidget):
             tri.lineTo(cx - 3.2, cy + 5.5)
             tri.closeSubpath()
             painter.drawPath(tri)
+        painter.restore()
+
+    @staticmethod
+    def _draw_vector_lyrics_note(painter, cx: float, cy: float, col: QColor):
+        """Draw mathematically and optically centered double eighth note vector."""
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(col))
+
+        # Left note head
+        painter.save()
+        painter.translate(cx - 3.4, cy + 3.7)
+        painter.rotate(-22.0)
+        painter.drawEllipse(QRectF(-2.2, -1.6, 4.4, 3.2))
+        painter.restore()
+
+        # Right note head
+        painter.save()
+        painter.translate(cx + 2.8, cy + 2.3)
+        painter.rotate(-22.0)
+        painter.drawEllipse(QRectF(-2.2, -1.6, 4.4, 3.2))
+        painter.restore()
+
+        # Left stem
+        painter.drawRoundedRect(QRectF(cx - 2.1, cy - 4.0, 1.4, 7.8), 0.5, 0.5)
+
+        # Right stem
+        painter.drawRoundedRect(QRectF(cx + 4.1, cy - 5.3, 1.4, 7.8), 0.5, 0.5)
+
+        # Connecting beam
+        beam = QPainterPath()
+        beam.moveTo(cx - 2.1, cy - 2.0)
+        beam.lineTo(cx + 5.5, cy - 3.3)
+        beam.lineTo(cx + 5.5, cy - 5.3)
+        beam.lineTo(cx - 2.1, cy - 4.0)
+        beam.closeSubpath()
+        painter.drawPath(beam)
+
         painter.restore()
 
     def _draw_volume_icon(painter, rect: QRectF, increase: bool, color: QColor):
@@ -5019,12 +5059,14 @@ class DesktopDynamicIsland(QWidget):
                 if self.is_spotify_active:
                     self.btn_lyrics_rect = QRectF(media_left, ctrl_y, 26.0, 26.0)
                     lyrics_active = self.lyrics_open
-                    painter.setBrush(QBrush(QColor(56, 189, 248, 40) if lyrics_active else QColor(255, 255, 255, 12)))
-                    painter.setPen(QPen(QColor(56, 189, 248, 180) if lyrics_active else QColor(255, 255, 255, 20), 0.8))
+                    lyr_hover_t = self.btn_hover_anim.get("lyrics", 0.0)
+                    bg_col = QColor(56, 189, 248, int(40 + 20 * lyr_hover_t)) if lyrics_active else QColor(255, 255, 255, int(12 + 16 * lyr_hover_t))
+                    border_col = QColor(56, 189, 248, int(180 + 40 * lyr_hover_t)) if lyrics_active else QColor(255, 255, 255, int(20 + 25 * lyr_hover_t))
+                    note_col = QColor("#38BDF8") if lyrics_active else _interpolate_color(QColor("#E2E8F0"), QColor("#FFFFFF"), lyr_hover_t)
+                    painter.setBrush(QBrush(bg_col))
+                    painter.setPen(QPen(border_col, 0.8))
                     painter.drawRoundedRect(self.btn_lyrics_rect, 7.5, 7.5)
-                    painter.setFont(_font("Segoe UI Symbol", 9.5, QFont.Weight.Bold))
-                    painter.setPen(QColor("#38BDF8") if lyrics_active else QColor("#E2E8F0"))
-                    painter.drawText(self.btn_lyrics_rect, Qt.AlignmentFlag.AlignCenter, "♫")
+                    self._draw_vector_lyrics_note(painter, self.btn_lyrics_rect.center().x(), cy_row, note_col)
                     vol_group_x = self.btn_lyrics_rect.right() + 8.0
                 else:
                     self.btn_lyrics_rect = QRectF()
