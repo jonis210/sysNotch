@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/preview_lyrics.png" alt="SysNotch Dynamic Island with Synced Lyrics" width="760" />
+  <img src="assets/v2_clean_complete_showcase.png" alt="SysNotch Dynamic Island Clean Showcase" width="820" />
 </p>
 
 ---
@@ -35,7 +35,7 @@
   </tr>
   <tr>
     <td width="50%">
-      <h3>⚡ Ultra-Low RAM Footprint (< 10 MB)</h3>
+      <h3>⚡ Ultra-Low RAM Footprint (&lt; 10 MB)</h3>
       Aggressive memory optimization utilizing direct Win32 API <code>SetProcessWorkingSetSize</code> trimming, bounded LRU pixmap caching, and zero-allocation painting loops — sipping less memory than Notepad.
     </td>
     <td width="50%">
@@ -46,7 +46,7 @@
   <tr>
     <td width="50%">
       <h3>🎵 Deep Windows Media Control</h3>
-      Direct Windows Runtime (WinRT) <code>GlobalSystemMediaTransportControls</code> bridge. Supports Spotify, Apple Music, Tidal, Chrome, Edge, Brave, YouTube, and local players.
+      Direct Windows Runtime (WinRT) <code>GlobalSystemMediaTransportControls</code> bridge with native WASAPI master volume slider and dynamic animated vector speaker icon.
     </td>
     <td width="50%">
       <h3>⏭️ One-Click YouTube Skip Ad</h3>
@@ -62,21 +62,39 @@
 <div align="center">
 
 ### 1. Minimalist Camera Pill (Collapsed Mode)
-*Living center clock with system network, battery, and CPU load monitors.*  
+*Mascot robot mini, Living center clock, and real-time mini audio spectrum.*  
 <br/>
-<img src="assets/preview_compact.png" alt="SysNotch Compact Notch Mode" width="280" />
+<img src="assets/v2_clean_compact.png" alt="SysNotch Compact Notch Mode" width="300" />
 <br/><br/>
 
-### 2. Media Dashboard (Expanded Hub)
-*Full playback controls, dynamic audio visualizer, seekbar, and volume controls.*  
+### 2. Profile Hub (No-Media Snug 124px)
+*Minimalist profile card with verified badge, online diode status, and ambient waves.*  
 <br/>
-<img src="assets/preview_media.png" alt="SysNotch Media Hub Mode" width="520" />
+<img src="assets/v2_clean_nomedia.png" alt="SysNotch Profile Hub Mode" width="460" />
 <br/><br/>
 
-### 3. Synchronized Karaoke Lyrics (Side-Drawer)
-*Zero-cut 2-line word wrapping, buttery smooth scroll, and Spotify-style typography.*  
+### 3. Media Dashboard (Expanded Player Hub)
+*Full playback controls, dynamic audio visualizer, seekbar, and animated speaker volume slider.*  
 <br/>
-<img src="assets/preview_lyrics.png" alt="SysNotch 2-Line Synced Lyrics" width="760" />
+<img src="assets/v2_clean_media.png" alt="SysNotch Media Hub Mode" width="520" />
+<br/><br/>
+
+### 4. Synchronized Karaoke Lyrics (Side-Drawer Mode)
+*Centered living clock, internet speed and gear glide smoothly to the right, and 2-line auto-wrap lyrics.*  
+<br/>
+<img src="assets/v2_clean_lyrics.png" alt="SysNotch 2-Line Synced Lyrics" width="760" />
+<br/><br/>
+
+### 5. Obsidian Glass Theme & Gradient Settings
+*Inline gradient editor with 9 squircle color presets, live preview capsule, and hex code input.*  
+<br/>
+<img src="assets/clean_preview_settings.png" alt="SysNotch Theme Settings" width="540" />
+<br/><br/>
+
+### 6. Interactive Animated Speaker Icon
+*5 dynamic states (0% Mute ✕, Low, Mid, High, Pulse) reacting to master volume changes.*  
+<br/>
+<img src="assets/volume_speaker_states.png" alt="SysNotch Speaker States" width="680" />
 <br/>
 
 </div>

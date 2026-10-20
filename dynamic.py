@@ -355,7 +355,150 @@ class WindowsAudioMeter:
             self._last_refresh = 0.0
             return 0.0, 0.0, 0.0
 
+class WindowsAudioController:
+    """Real-time Windows WASAPI Core Audio master volume & mute controller."""
+
+    def __init__(self):
+        self.available = False
+        self._endpoint_volume = None
+        self._get_scalar = None
+        self._set_scalar = None
+        self._get_mute = None
+        self._set_mute = None
+        self._last_refresh = 0.0
+        self.refresh_device()
+
+    def refresh_device(self):
+        if sys.platform != "win32":
+            return
+        try:
+            class _GUID(ctypes.Structure):
+                _fields_ = [
+                    ("Data1", wintypes.DWORD),
+                    ("Data2", wintypes.WORD),
+                    ("Data3", wintypes.WORD),
+                    ("Data4", wintypes.BYTE * 8),
+                ]
+
+            def _get_guid(s):
+                g = _GUID()
+                ctypes.windll.ole32.IIDFromString(s, ctypes.byref(g))
+                return g
+
+            CLSID_MMDeviceEnumerator = _get_guid("{BCDE0395-E52F-467C-8E3D-C4579291692E}")
+            IID_IMMDeviceEnumerator = _get_guid("{A95664D2-9614-4F35-A746-DE8DB63617E6}")
+            IID_IAudioEndpointVolume = _get_guid("{5CDF2C82-841E-4546-9722-0CF74078229A}")
+
+            ctypes.windll.ole32.CoInitialize(None)
+            enumerator = ctypes.c_void_p()
+            hr = ctypes.windll.ole32.CoCreateInstance(
+                ctypes.byref(CLSID_MMDeviceEnumerator),
+                None,
+                1,
+                ctypes.byref(IID_IMMDeviceEnumerator),
+                ctypes.byref(enumerator),
+            )
+            if hr != 0 or not enumerator:
+                return
+
+            vtable_enum = ctypes.cast(enumerator, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+            GetDefaultAudioEndpoint = ctypes.WINFUNCTYPE(
+                wintypes.HRESULT,
+                ctypes.c_void_p,
+                wintypes.UINT,
+                wintypes.UINT,
+                ctypes.POINTER(ctypes.c_void_p),
+            )(vtable_enum[4])
+
+            defaultDevice = ctypes.c_void_p()
+            hr = GetDefaultAudioEndpoint(enumerator, 0, 1, ctypes.byref(defaultDevice))
+            if hr != 0 or not defaultDevice:
+                return
+
+            dev_vtable = ctypes.cast(defaultDevice, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+            Activate = ctypes.WINFUNCTYPE(
+                wintypes.HRESULT,
+                ctypes.c_void_p,
+                ctypes.POINTER(_GUID),
+                wintypes.DWORD,
+                ctypes.c_void_p,
+                ctypes.POINTER(ctypes.c_void_p),
+            )(dev_vtable[3])
+
+            endpointVolume = ctypes.c_void_p()
+            hr = Activate(defaultDevice, ctypes.byref(IID_IAudioEndpointVolume), 23, None, ctypes.byref(endpointVolume))
+            if hr != 0 or not endpointVolume:
+                return
+
+            self._endpoint_volume = endpointVolume
+            epv_vtable = ctypes.cast(endpointVolume, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+
+            self._set_scalar = ctypes.WINFUNCTYPE(
+                wintypes.HRESULT, ctypes.c_void_p, ctypes.c_float, ctypes.c_void_p
+            )(epv_vtable[7])
+            self._get_scalar = ctypes.WINFUNCTYPE(
+                wintypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(ctypes.c_float)
+            )(epv_vtable[9])
+            self._set_mute = ctypes.WINFUNCTYPE(
+                wintypes.HRESULT, ctypes.c_void_p, wintypes.BOOL, ctypes.c_void_p
+            )(epv_vtable[14])
+            self._get_mute = ctypes.WINFUNCTYPE(
+                wintypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(wintypes.BOOL)
+            )(epv_vtable[15])
+
+            self.available = True
+            self._last_refresh = time.perf_counter()
+        except Exception:
+            self.available = False
+
+    def get_volume(self) -> float:
+        if not self._endpoint_volume:
+            self.refresh_device()
+        if self._endpoint_volume and self._get_scalar:
+            try:
+                val = ctypes.c_float()
+                if self._get_scalar(self._endpoint_volume, ctypes.byref(val)) == 0:
+                    return float(val.value)
+            except Exception:
+                self.refresh_device()
+        return 0.5
+
+    def set_volume(self, scalar: float):
+        scalar = max(0.0, min(1.0, float(scalar)))
+        if not self._endpoint_volume:
+            self.refresh_device()
+        if self._endpoint_volume and self._set_scalar:
+            try:
+                self._set_scalar(self._endpoint_volume, ctypes.c_float(scalar), None)
+                if scalar > 0.0:
+                    self.set_mute(False)
+            except Exception:
+                self.refresh_device()
+
+    def is_muted(self) -> bool:
+        if not self._endpoint_volume:
+            self.refresh_device()
+        if self._endpoint_volume and self._get_mute:
+            try:
+                m = wintypes.BOOL()
+                if self._get_mute(self._endpoint_volume, ctypes.byref(m)) == 0:
+                    return bool(m.value)
+            except Exception:
+                self.refresh_device()
+        return False
+
+    def set_mute(self, muted: bool):
+        if not self._endpoint_volume:
+            self.refresh_device()
+        if self._endpoint_volume and self._set_mute:
+            try:
+                self._set_mute(self._endpoint_volume, wintypes.BOOL(muted), None)
+            except Exception:
+                self.refresh_device()
+
+
 class BrowserTabDetector:
+
     """
     Mendeteksi apakah ada tab browser aktif yang berada tepat di bawah area notch (occluded).
     Menggunakan Windows UI Automation (UIA) native via ctypes untuk hit-testing super cepat (<2.5ms).
@@ -737,6 +880,8 @@ class DesktopDynamicIsland(QWidget):
         self.hovered_btn = None
         self.btn_hover_anim = {
             "lyrics": 0.0,
+            "speaker_mute": 0.0,
+            "volume_slider": 0.0,
             "volume_down": 0.0,
             "volume_up": 0.0,
             "prev": 0.0,
@@ -783,8 +928,8 @@ class DesktopDynamicIsland(QWidget):
         self.can_previous = False
         self.can_next = False
         self.settings = QSettings("DynamicIsland", "DynamicIsland")
-        self.default_gradient_top = QColor("#171C2B")
-        self.default_gradient_bottom = QColor("#090B12")
+        self.default_gradient_top = QColor("#0C0F17")
+        self.default_gradient_bottom = QColor("#030406")
         self.gradient_top = QColor(
             self.settings.value("appearance/gradientTop", self.default_gradient_top.name())
         )
@@ -822,6 +967,14 @@ class DesktopDynamicIsland(QWidget):
         self.media_source_app = ""
         self.btn_volume_down_rect = QRectF()
         self.btn_volume_up_rect = QRectF()
+        self.btn_speaker_rect = QRectF()
+        self.vol_group_rect = QRectF()
+        self.vol_track_rect = QRectF()
+        self.is_dragging_volume = False
+        self.volume_pulse = 0.0
+        self.current_volume_scalar = 0.5
+        self.is_audio_muted = False
+        self.audio_controller = WindowsAudioController()
         self.btn_skip_ad_rect = QRectF()
         self.btn_settings_rect = QRectF()
         self.settings_open = False
@@ -862,12 +1015,12 @@ class DesktopDynamicIsland(QWidget):
             )
             editor.setStyleSheet("""
                 QLineEdit {
-                    color: #e8edf5; background: #111722;
-                    border: 1px solid #354052; border-radius: 8px;
-                    padding: 2px 5px; font: 8pt "Segoe UI";
-                    selection-background-color: #5267c9;
+                    color: #F1F5F9; background: rgba(255, 255, 255, 12);
+                    border: 1px solid rgba(255, 255, 255, 24); border-radius: 6px;
+                    padding: 2px 4px; font: 7.8pt "Consolas", monospace;
+                    selection-background-color: #38BDF8;
                 }
-                QLineEdit:focus { border: 1px solid #83e3c1; }
+                QLineEdit:focus { border: 1.2px solid #38BDF8; background: rgba(255, 255, 255, 20); }
             """)
             editor.textChanged.connect(
                 lambda value, color_side=side: self._on_gradient_hex_changed(color_side, value)
@@ -1149,39 +1302,38 @@ class DesktopDynamicIsland(QWidget):
         """Paint an inline editor and place its two HEX fields inside the island."""
         self.settings_top_hitboxes = []
         self.settings_bottom_hitboxes = []
-        self.settings_close_rect = QRectF(expanded_x + expanded_w - 40.0, 8.0, 22.0, 22.0)
+        self.settings_close_rect = QRectF(expanded_x + expanded_w - 38.0, 8.0, 20.0, 20.0)
         painter.save()
 
-        painter.setPen(QColor("#EEF2F8"))
-        painter.setFont(QFont("Segoe UI", 9, QFont.Weight.DemiBold))
+        painter.setPen(QColor("#FFFFFF"))
+        painter.setFont(_font("Segoe UI", 9.2, QFont.Weight.DemiBold))
         painter.drawText(
-            QRectF(expanded_x + 18.0, 6.0, expanded_w - 78.0, 26.0),
+            QRectF(expanded_x + 18.0, 6.0, expanded_w - 78.0, 24.0),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            "Warna gradient",
+            "Pengaturan Warna Gradien",
         )
 
         close_hovered = self.hovered_btn == "settings_cancel"
-        close_bg = _interpolate_color(QColor(255, 255, 255, 18), QColor(255, 255, 255, 42), 1.0 if close_hovered else 0.0)
-        close_border = _interpolate_color(QColor(255, 255, 255, 26), QColor(255, 255, 255, 65), 1.0 if close_hovered else 0.0)
-        painter.setPen(QPen(close_border, 1.0))
+        close_bg = _interpolate_color(QColor(255, 255, 255, 12), QColor(255, 255, 255, 34), 1.0 if close_hovered else 0.0)
+        close_border = _interpolate_color(QColor(255, 255, 255, 18), QColor(255, 255, 255, 55), 1.0 if close_hovered else 0.0)
+        painter.setPen(QPen(close_border, 0.8))
         painter.setBrush(QBrush(close_bg))
         painter.drawEllipse(self.settings_close_rect)
         close_center = self.settings_close_rect.center()
-        painter.setPen(QPen(QColor(255, 255, 255, 230), 1.2, Qt.PenStyle.SolidLine,
-                            Qt.PenCapStyle.RoundCap))
+        painter.setPen(QPen(QColor("#94A3B8"), 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         painter.drawLine(
-            QPointF(close_center.x() - 3.2, close_center.y() - 3.2),
-            QPointF(close_center.x() + 3.2, close_center.y() + 3.2),
+            QPointF(close_center.x() - 3.0, close_center.y() - 3.0),
+            QPointF(close_center.x() + 3.0, close_center.y() + 3.0),
         )
         painter.drawLine(
-            QPointF(close_center.x() + 3.2, close_center.y() - 3.2),
-            QPointF(close_center.x() - 3.2, close_center.y() + 3.2),
+            QPointF(close_center.x() + 3.0, close_center.y() - 3.0),
+            QPointF(close_center.x() - 3.0, close_center.y() + 3.0),
         )
 
-        label_width = 46.0 if expanded_w >= 300.0 else 35.0
-        field_width = 78.0 if expanded_w >= 380.0 else (62.0 if expanded_w >= 260.0 else 56.0)
-        chip_size = 17.0 if expanded_w >= 380.0 else (15.0 if expanded_w >= 300.0 else 12.0)
-        chip_gap = 5.0 if expanded_w >= 380.0 else (4.0 if expanded_w >= 300.0 else 3.0)
+        label_width = 42.0
+        field_width = 64.0
+        chip_size = 15.0
+        chip_gap = 5.0
         chip_start_x = expanded_x + 18.0 + label_width
         chip_end_x = expanded_x + expanded_w - 18.0 - field_width - 8.0
         chip_available_w = max(0.0, chip_end_x - chip_start_x)
@@ -1190,18 +1342,18 @@ class DesktopDynamicIsland(QWidget):
             max(0, int((chip_available_w + chip_gap) // (chip_size + chip_gap))),
         )
 
-        painter.setFont(QFont("Segoe UI", 7, QFont.Weight.Bold))
+        painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.Bold))
         for side, label, row_y, current_color, editor, hitboxes in (
             (
-                "top", "ATAS", 36.0, self.appearance_top,
+                "top", "ATAS", 38.0, self.appearance_top,
                 self.gradient_top_input, self.settings_top_hitboxes,
             ),
             (
-                "bottom", "BAWAH", 69.0, self.appearance_bottom,
+                "bottom", "BAWAH", 68.0, self.appearance_bottom,
                 self.gradient_bottom_input, self.settings_bottom_hitboxes,
             ),
         ):
-            painter.setPen(QColor("#9AA7B8"))
+            painter.setPen(QColor("#64748B"))
             painter.drawText(
                 QRectF(expanded_x + 18.0, row_y, label_width - 4.0, 22.0),
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -1217,10 +1369,10 @@ class DesktopDynamicIsland(QWidget):
                 )
                 selected = color.name().lower() == current_color.name().lower()
                 painter.setPen(
-                    QPen(QColor("#83E3C1" if selected else "#596477"), 1.7 if selected else 1.0)
+                    QPen(QColor("#38BDF8") if selected else QColor(255, 255, 255, 30), 1.8 if selected else 0.8)
                 )
                 painter.setBrush(QBrush(color))
-                painter.drawRoundedRect(rect, chip_size * 0.34, chip_size * 0.34)
+                painter.drawRoundedRect(rect, 4.0, 4.0)
                 hitboxes.append((rect, QColor(color)))
 
             editor_x = expanded_x + expanded_w - 18.0 - field_width
@@ -1251,26 +1403,42 @@ class DesktopDynamicIsland(QWidget):
             ):
                 editor.hide()
 
-        self.settings_reset_rect = QRectF(expanded_x + 18.0, 104.0, 62.0, 24.0)
-        self.settings_save_rect = QRectF(expanded_x + expanded_w - 88.0, 103.0, 70.0, 26.0)
+        btn_y = 104.0
+        self.settings_reset_rect = QRectF(expanded_x + 18.0, btn_y, 60.0, 24.0)
+        self.settings_save_rect = QRectF(expanded_x + expanded_w - 18.0 - 68.0, btn_y, 68.0, 24.0)
 
+        # Reset Button (Left)
         reset_hovered = self.hovered_btn == "settings_reset"
-        reset_bg = _interpolate_color(QColor(255, 255, 255, 16), QColor(255, 255, 255, 34), 1.0 if reset_hovered else 0.0)
-        reset_border = _interpolate_color(QColor(255, 255, 255, 24), QColor(255, 255, 255, 55), 1.0 if reset_hovered else 0.0)
-        painter.setPen(QPen(reset_border, 1.0))
+        reset_bg = _interpolate_color(QColor(255, 255, 255, 10), QColor(255, 255, 255, 26), 1.0 if reset_hovered else 0.0)
+        reset_border = _interpolate_color(QColor(255, 255, 255, 18), QColor(255, 255, 255, 45), 1.0 if reset_hovered else 0.0)
+        painter.setPen(QPen(reset_border, 0.8))
         painter.setBrush(QBrush(reset_bg))
         painter.drawRoundedRect(self.settings_reset_rect, 12.0, 12.0)
-        painter.setPen(QColor("#E2E8F0"))
-        painter.setFont(QFont("Segoe UI", 8, QFont.Weight.DemiBold))
+        painter.setPen(QColor("#94A3B8"))
+        painter.setFont(_font("Segoe UI", 8.0, QFont.Weight.Medium))
         painter.drawText(self.settings_reset_rect, Qt.AlignmentFlag.AlignCenter, "Reset")
 
+        # Live Preview Capsule (Center)
+        prev_w = 80.0
+        prev_rect = QRectF(expanded_x + (expanded_w - prev_w) / 2.0, btn_y + 2.0, prev_w, 20.0)
+        prev_grad = QLinearGradient(prev_rect.topLeft(), prev_rect.bottomLeft())
+        prev_grad.setColorAt(0.0, self.appearance_top)
+        prev_grad.setColorAt(1.0, self.appearance_bottom)
+        painter.setBrush(QBrush(prev_grad))
+        painter.setPen(QPen(QColor(255, 255, 255, 25), 0.8))
+        painter.drawRoundedRect(prev_rect, 10.0, 10.0)
+        painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.Medium))
+        painter.setPen(QColor("#94A3B8"))
+        painter.drawText(prev_rect, Qt.AlignmentFlag.AlignCenter, "Preview")
+
+        # Save Button (Right)
         save_hovered = self.hovered_btn == "settings_save"
-        save_bg = _interpolate_color(QColor("#FFFFFF"), QColor("#F1F5F9"), 1.0 if save_hovered else 0.0)
+        save_bg = _interpolate_color(QColor("#F8FAFC"), QColor("#E2E8F0"), 1.0 if save_hovered else 0.0)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(save_bg))
-        painter.drawRoundedRect(self.settings_save_rect, 13.0, 13.0)
-        painter.setPen(QColor("#090D16"))
-        painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        painter.drawRoundedRect(self.settings_save_rect, 12.0, 12.0)
+        painter.setPen(QColor("#0F172A"))
+        painter.setFont(_font("Segoe UI", 8.2, QFont.Weight.Bold))
         painter.drawText(self.settings_save_rect, Qt.AlignmentFlag.AlignCenter, "Simpan")
         painter.restore()
 
@@ -1961,6 +2129,10 @@ class DesktopDynamicIsland(QWidget):
             return None
         if self.is_spotify_active and self.btn_lyrics_rect.contains(local_pos):
             return "lyrics"
+        if getattr(self, "btn_speaker_rect", QRectF()).contains(local_pos):
+            return "speaker_mute"
+        if getattr(self, "vol_group_rect", QRectF()).contains(local_pos):
+            return "volume_slider"
         for name, rect, enabled in (
             ("volume_down", self.btn_volume_down_rect, True),
             ("volume_up", self.btn_volume_up_rect, True),
@@ -2006,6 +2178,80 @@ class DesktopDynamicIsland(QWidget):
         # Right quote
         painter.drawEllipse(QPointF(cx + 1.6, cy - 2.0), 0.9, 0.9)
         painter.drawLine(QPointF(cx + 1.6, cy - 1.6), QPointF(cx + 1.0, cy + 0.4))
+        painter.restore()
+
+    @staticmethod
+    def _draw_animated_speaker_icon(painter, cx: float, cy: float, level: float, pulse: float = 0.0, is_mute: bool = False, color: QColor = QColor("#CBD5E1")):
+        """
+        Renders the dynamic animated speaker icon:
+        - level == 0 or is_mute: Speaker + micro cross (✕)
+        - 0 < level <= 0.33: Speaker + 1 wave
+        - 0.33 < level <= 0.66: Speaker + 2 waves
+        - level > 0.66: Speaker + 3 waves
+        - pulse: scale punch / ripple wave animation factor
+        """
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        if abs(pulse) > 0.01:
+            painter.translate(cx, cy)
+            scale_fac = 1.0 + pulse * 0.18
+            painter.scale(scale_fac, scale_fac)
+            painter.translate(-cx, -cy)
+
+        # 1. Speaker Cone Body
+        cone_w = 4.0
+        cone_h = 6.0
+        flare_w = 4.5
+        flare_h = 12.0
+
+        body = QPainterPath()
+        body.moveTo(cx - 7.5, cy - cone_h / 2.0)
+        body.lineTo(cx - 7.5 + cone_w, cy - cone_h / 2.0)
+        body.lineTo(cx - 7.5 + cone_w + flare_w, cy - flare_h / 2.0)
+        body.lineTo(cx - 7.5 + cone_w + flare_w, cy + flare_h / 2.0)
+        body.lineTo(cx - 7.5 + cone_w, cy + cone_h / 2.0)
+        body.lineTo(cx - 7.5, cy + cone_h / 2.0)
+        body.closeSubpath()
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(color))
+        painter.drawPath(body)
+
+        # 2. Soundwaves / Mute State
+        if is_mute or level <= 0.001:
+            painter.setPen(QPen(QColor("#F87171"), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            cross_cx = cx + 5.0
+            painter.drawLine(QPointF(cross_cx - 3.2, cy - 3.2), QPointF(cross_cx + 3.2, cy + 3.2))
+            painter.drawLine(QPointF(cross_cx - 3.2, cy + 3.2), QPointF(cross_cx + 3.2, cy - 3.2))
+        else:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            w1_alpha = min(255, int(255 * min(1.0, level / 0.33)))
+            w1_col = QColor(color.red(), color.green(), color.blue(), w1_alpha)
+            painter.setPen(QPen(w1_col, 1.3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            wave1 = QPainterPath()
+            wave1.arcMoveTo(QRectF(cx + 1.0, cy - 4.5, 5.0, 9.0), -45)
+            wave1.arcTo(QRectF(cx + 1.0, cy - 4.5, 5.0, 9.0), -45, 90)
+            painter.drawPath(wave1)
+
+            if level > 0.33:
+                w2_alpha = min(255, int(255 * min(1.0, (level - 0.33) / 0.33)))
+                w2_col = QColor(color.red(), color.green(), color.blue(), w2_alpha)
+                painter.setPen(QPen(w2_col, 1.3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                wave2 = QPainterPath()
+                wave2.arcMoveTo(QRectF(cx + 3.5, cy - 7.5, 7.5, 15.0), -50)
+                wave2.arcTo(QRectF(cx + 3.5, cy - 7.5, 7.5, 15.0), -50, 100)
+                painter.drawPath(wave2)
+
+            if level > 0.66:
+                w3_alpha = min(255, int(255 * min(1.0, (level - 0.66) / 0.34)))
+                w3_col = QColor(color.red(), color.green(), color.blue(), w3_alpha)
+                painter.setPen(QPen(w3_col, 1.3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                wave3 = QPainterPath()
+                wave3.arcMoveTo(QRectF(cx + 6.0, cy - 10.5, 10.0, 21.0), -55)
+                wave3.arcTo(QRectF(cx + 6.0, cy - 10.5, 10.0, 21.0), -55, 110)
+                painter.drawPath(wave3)
+
         painter.restore()
 
     @staticmethod
@@ -3872,8 +4118,10 @@ class DesktopDynamicIsland(QWidget):
         button_names = (
             "profile_edit", "profile_cancel", "profile_reset", "profile_save",
             "settings", "settings_cancel", "settings_reset", "settings_save",
-            "lyrics", "volume_down", "volume_up", "prev", "play", "next", "skip_ad"
+            "lyrics", "speaker_mute", "volume_slider", "volume_down", "volume_up", "prev", "play", "next", "skip_ad"
         )
+        if getattr(self, "volume_pulse", 0.0) > 0.001:
+            self.volume_pulse = max(0.0, self.volume_pulse - dt * 2.5)
         for key in button_names:
             target = 1.0 if self.hovered_btn == key else 0.0
             cur = self.btn_hover_anim.get(key, 0.0)
@@ -3915,6 +4163,7 @@ class DesktopDynamicIsland(QWidget):
             or abs(target_pencil - self.pencil_presence) > 0.005
             or any(v > 0.005 for v in self.btn_hover_anim.values())
             or getattr(self, "view_transition_t", 1.0) < 1.0
+            or getattr(self, "volume_pulse", 0.0) > 0.005
         )
         is_audio_active = self.is_playing or getattr(self, "_system_audio_active", False)
         is_hover_active = (
@@ -4014,6 +4263,19 @@ class DesktopDynamicIsland(QWidget):
                     self.update()
                 event.accept()
                 return
+            if button == "speaker_mute":
+                self.toggle_mute()
+                self.volume_pulse = 0.35
+                self.update()
+                event.accept()
+                return
+            if button == "volume_slider":
+                self.is_dragging_volume = True
+                self._update_volume_from_pos(event.position().x())
+                self.volume_pulse = 0.25
+                self.update()
+                event.accept()
+                return
             if button and button.startswith("tab_dot:"):
                 new_idx = int(button.removeprefix("tab_dot:"))
                 if new_idx != self.island_page_index:
@@ -4055,6 +4317,50 @@ class DesktopDynamicIsland(QWidget):
                 event.accept()
                 return
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if getattr(self, "is_dragging_volume", False):
+            self._update_volume_from_pos(event.position().x())
+            self.update()
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if getattr(self, "is_dragging_volume", False):
+            self.is_dragging_volume = False
+            self.update()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def wheelEvent(self, event):
+        pos = event.position()
+        if getattr(self, "vol_group_rect", QRectF()).contains(pos):
+            delta = event.angleDelta().y()
+            step = 0.03 if delta > 0 else -0.03
+            cur_vol = self.audio_controller.get_volume()
+            new_vol = max(0.0, min(1.0, cur_vol + step))
+            self.audio_controller.set_volume(new_vol)
+            self.current_volume_scalar = new_vol
+            self.volume_pulse = 0.22
+            self.update()
+            event.accept()
+            return
+        super().wheelEvent(event)
+
+    def _update_volume_from_pos(self, px: float):
+        if getattr(self, "vol_track_rect", None) and self.vol_track_rect.width() > 0:
+            rel = (px - self.vol_track_rect.left()) / self.vol_track_rect.width()
+            new_vol = max(0.0, min(1.0, rel))
+            self.audio_controller.set_volume(new_vol)
+            self.current_volume_scalar = new_vol
+            self.is_audio_muted = (new_vol <= 0.001)
+
+    def toggle_mute(self):
+        new_mute = not self.audio_controller.is_muted()
+        self.audio_controller.set_mute(new_mute)
+        self.is_audio_muted = new_mute
 
     def create_notch_path(self, x: float, w: float, h: float, ear_r: float, bottom_r: float):
         """
@@ -4279,7 +4585,7 @@ class DesktopDynamicIsland(QWidget):
             margin = 16.0
 
             # 1. Top Notification & Status Bar (Battery, CPU, RAM, Wi-Fi, Bluetooth, Gradient Settings Gear)
-            self._paint_top_status_bar(painter, media_x, media_w, margin, draw_clock=False)
+            self._paint_top_status_bar(painter, x, w, margin, draw_clock=False)
 
             # 1. Determine which tab to render based on sequential scale-fade lifecycle
             u = getattr(self, "tab_transition_t", 1.0)
@@ -4308,6 +4614,9 @@ class DesktopDynamicIsland(QWidget):
                 self.btn_next_rect = QRectF()
                 self.btn_volume_down_rect = QRectF()
                 self.btn_volume_up_rect = QRectF()
+                self.btn_speaker_rect = QRectF()
+                self.vol_group_rect = QRectF()
+                self.vol_track_rect = QRectF()
                 self.btn_skip_ad_rect = QRectF()
 
             # 2. Render other tabs (Tabs 1, 2, 3...) when cur_tab != 0
@@ -4565,51 +4874,83 @@ class DesktopDynamicIsland(QWidget):
                     self.btn_lyrics_rect = QRectF()
                     volume_x = media_x + margin
 
-                # 2. Volume controls (Apple frosted pill capsule)
-                vol_btn_w = 28.0
-                self.btn_volume_down_rect = QRectF(
-                    volume_x, button_y, vol_btn_w, row_h
+                # 2. Volume controls: Animated Interactive Speaker + Smooth Volume Slider
+                vol_group_w = 104.0 if media_w >= 350.0 else 92.0
+                self.vol_group_rect = QRectF(volume_x, button_y, vol_group_w, row_h)
+                self.btn_speaker_rect = QRectF(volume_x, button_y, 26.0, row_h)
+                
+                # Volume slider track inside the capsule
+                vol_track_x = volume_x + 27.0
+                vol_track_w = vol_group_w - 35.0
+                vol_track_h = 4.0
+                vol_track_y = button_y + (row_h - vol_track_h) / 2.0
+                self.vol_track_rect = QRectF(vol_track_x, vol_track_y, vol_track_w, vol_track_h)
+                
+                # Clear legacy volume down/up rects
+                self.btn_volume_down_rect = QRectF()
+                self.btn_volume_up_rect = QRectF()
+
+                # Capsule Background
+                speaker_hovered = self.hovered_btn == "speaker_mute"
+                slider_hovered = self.hovered_btn == "volume_slider" or getattr(self, "is_dragging_volume", False)
+                vol_capsule_bg = _interpolate_color(
+                    QColor(255, 255, 255, 12),
+                    QColor(255, 255, 255, 24),
+                    1.0 if (speaker_hovered or slider_hovered) else 0.0,
                 )
-                self.btn_volume_up_rect = QRectF(
-                    self.btn_volume_down_rect.right(),
-                    button_y,
-                    vol_btn_w,
-                    row_h,
+                painter.setPen(QPen(QColor(255, 255, 255, 22), 1.0))
+                painter.setBrush(QBrush(vol_capsule_bg))
+                painter.drawRoundedRect(self.vol_group_rect, radius, radius)
+
+                # Query current master volume level and mute status
+                if not getattr(self, "is_dragging_volume", False):
+                    self.current_volume_scalar = self.audio_controller.get_volume()
+                    self.is_audio_muted = self.audio_controller.is_muted()
+                
+                cur_vol = getattr(self, "current_volume_scalar", 0.5)
+                is_muted = getattr(self, "is_audio_muted", False)
+                vol_pulse = getattr(self, "volume_pulse", 0.0)
+
+                # Draw Animated Speaker Icon on the left
+                speaker_col = QColor("#F87171") if (is_muted or cur_vol <= 0.001) else (
+                    _interpolate_color(QColor("#CBD5E1"), QColor("#FFFFFF"), 1.0 if speaker_hovered else 0.0)
                 )
-                volume_group_rect = QRectF(
-                    volume_x,
-                    button_y,
-                    vol_btn_w * 2.0,
-                    row_h,
-                )
-                painter.setPen(QPen(QColor(255, 255, 255, 24), 1.0))
-                painter.setBrush(QBrush(QColor(255, 255, 255, 16)))
-                painter.drawRoundedRect(volume_group_rect, radius, radius)
-                divider_x = self.btn_volume_down_rect.right()
-                painter.setPen(QPen(QColor(255, 255, 255, 20), 1.0))
-                painter.drawLine(
-                    QPointF(divider_x, volume_group_rect.top() + 6.0),
-                    QPointF(divider_x, volume_group_rect.bottom() - 6.0),
+                self._draw_animated_speaker_icon(
+                    painter,
+                    self.btn_speaker_rect.center().x(),
+                    self.btn_speaker_rect.center().y(),
+                    0.0 if is_muted else cur_vol,
+                    pulse=vol_pulse,
+                    is_mute=is_muted,
+                    color=speaker_col,
                 )
 
-                for name, rect, increase in (
-                    ("volume_down", self.btn_volume_down_rect, False),
-                    ("volume_up", self.btn_volume_up_rect, True),
-                ):
-                    vol_t = self.btn_hover_anim.get(name, 0.0)
-                    if vol_t > 0.01:
-                        painter.save()
-                        vol_clip = QPainterPath()
-                        vol_clip.addRoundedRect(volume_group_rect, radius, radius)
-                        painter.setClipPath(vol_clip)
-                        painter.fillRect(rect, QColor(255, 255, 255, int(28 * vol_t)))
-                        painter.restore()
-                    self._draw_volume_icon(
-                        painter,
-                        rect,
-                        increase,
-                        _interpolate_color(QColor("#D6DFEB"), QColor("#FFFFFF"), vol_t),
+                # Slider Track Background
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(QColor(255, 255, 255, 26)))
+                painter.drawRoundedRect(self.vol_track_rect, vol_track_h / 2.0, vol_track_h / 2.0)
+
+                # Slider Filled Track
+                fill_ratio = 0.0 if is_muted else max(0.0, min(1.0, cur_vol))
+                filled_w = vol_track_w * fill_ratio
+                if filled_w > 0.0:
+                    vol_grad = QLinearGradient(vol_track_x, vol_track_y, vol_track_x + filled_w, vol_track_y)
+                    vol_grad.setColorAt(0.0, QColor("#38BDF8"))
+                    vol_grad.setColorAt(1.0, QColor("#60A5FA"))
+                    painter.setBrush(QBrush(vol_grad))
+                    painter.drawRoundedRect(
+                        QRectF(vol_track_x, vol_track_y, filled_w, vol_track_h),
+                        vol_track_h / 2.0,
+                        vol_track_h / 2.0,
                     )
+
+                # Slider Thumb
+                thumb_x = vol_track_x + filled_w
+                thumb_y = vol_track_y + (vol_track_h / 2.0)
+                thumb_r = 3.6 if not slider_hovered else 4.2
+                painter.setPen(QPen(QColor(56, 189, 248, 180), 1.0))
+                painter.setBrush(QBrush(QColor("#FFFFFF")))
+                painter.drawEllipse(QPointF(thumb_x, thumb_y), thumb_r, thumb_r)
 
                 if skip_ready:
                     skip_width = min(126.0, max(92.0, media_w * 0.30))
@@ -4732,7 +5073,7 @@ class DesktopDynamicIsland(QWidget):
                 # Time and progress share the space between the volume and
                 # transport clusters; short widths gracefully omit the end time.
                 if self.has_media:
-                    progress_x = self.btn_volume_up_rect.right() + (10.0 if compact else 12.0)
+                    progress_x = self.vol_group_rect.right() + (10.0 if compact else 12.0)
                     right_control = (
                         self.btn_skip_ad_rect.left()
                         if skip_ready
@@ -4788,6 +5129,9 @@ class DesktopDynamicIsland(QWidget):
                 self.btn_next_rect = QRectF()
                 self.btn_volume_down_rect = QRectF()
                 self.btn_volume_up_rect = QRectF()
+                self.btn_speaker_rect = QRectF()
+                self.vol_group_rect = QRectF()
+                self.vol_track_rect = QRectF()
                 self.btn_skip_ad_rect = QRectF()
 
             # Side Lyrics Panel (appears when expanded to the right, only for Spotify)
@@ -4831,10 +5175,7 @@ class DesktopDynamicIsland(QWidget):
         if not self.settings_open and shrink_fade > 0.005:
             painter.save()
             painter.setOpacity(shrink_fade)
-            if self.lyrics_open and self.is_spotify_active and w > self.expanded_w:
-                media_center_x = (self.canvas_w - w) / 2.0 + (self.expanded_w / 2.0)
-            else:
-                media_center_x = self.canvas_w / 2.0
+            media_center_x = self.canvas_w / 2.0
             self._paint_scaling_clock(painter, media_center_x)
             painter.restore()
 
