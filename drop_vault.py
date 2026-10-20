@@ -3,6 +3,8 @@ import sys
 import time
 import socket
 import threading
+import tempfile
+import zipfile
 import urllib.parse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from typing import Optional, List
@@ -90,6 +92,8 @@ class TeleportServer:
                         mime = "video/mp4"
                     elif ext in ('.mp3', '.wav', '.flac', '.m4a'):
                         mime = "audio/mpeg"
+                    elif ext == '.zip':
+                        mime = "application/zip"
 
                     self.send_header("Content-Type", mime)
                     self.send_header("Content-Disposition", f'attachment; filename="{file_name}"')
@@ -106,7 +110,6 @@ class TeleportServer:
             def log_message(self, format, *args):
                 pass
 
-        # Port 0 asks the OS to bind any free available port
         self.server = HTTPServer((ip, 0), SingleFileHandler)
         self.port = self.server.server_port
         self.is_running = True
@@ -154,7 +157,7 @@ class VaultItem:
                 pm = QPixmap(self.path)
                 if not pm.isNull():
                     self.thumbnail = pm.scaled(
-                        44, 44,
+                        36, 36,
                         Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                         Qt.TransformationMode.SmoothTransformation
                     )
@@ -166,7 +169,7 @@ class VaultItem:
             self.teleport_server = TeleportServer(self.path)
             self.teleport_url = self.teleport_server.start()
             if HAS_QRCODE:
-                self.teleport_qr = self._generate_qr(self.teleport_url)
+                self.teleport_qr = generate_qr_pixmap(self.teleport_url)
         return self.teleport_url
 
     def stop_teleport(self):
@@ -176,49 +179,51 @@ class VaultItem:
             self.teleport_url = ""
             self.teleport_qr = None
 
-    @staticmethod
-    def _generate_qr(url: str, size: int = 100) -> Optional[QPixmap]:
-        if not HAS_QRCODE:
-            return None
-        try:
-            qr = qrcode.QRCode(
-                version=1,
-                error_correction=qrcode.constants.ERROR_CORRECT_M,
-                box_size=4,
-                border=1,
-            )
-            qr.add_data(url)
-            qr.make(fit=True)
-            pil_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
-            pil_img = pil_img.resize((size, size), Image.Resampling.NEAREST)
 
-            data = pil_img.tobytes("raw", "RGBA")
-            qimg = QImage(data, size, size, QImage.Format.Format_RGBA8888)
-            return QPixmap.fromImage(qimg)
-        except Exception:
-            return None
+def generate_qr_pixmap(url: str, size: int = 100) -> Optional[QPixmap]:
+    if not HAS_QRCODE:
+        return None
+    try:
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=4,
+            border=1,
+        )
+        qr.add_data(url)
+        qr.make(fit=True)
+        pil_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
+        pil_img = pil_img.resize((size, size), Image.Resampling.NEAREST)
+
+        data = pil_img.tobytes("raw", "RGBA")
+        qimg = QImage(data, size, size, QImage.Format.Format_RGBA8888)
+        return QPixmap.fromImage(qimg)
+    except Exception:
+        return None
 
 
 class DropVaultManager:
     def __init__(self):
         self.items: List[VaultItem] = []
         self.active_qr_item_id: Optional[str] = None
-        self.selected_item_index: int = 0
+        self.bundle_server: Optional[TeleportServer] = None
+        self.bundle_url: str = ""
+        self.bundle_qr: Optional[QPixmap] = None
+        self.bundle_path: Optional[str] = None
+        self.is_bundle_qr_active: bool = False
 
     def add_path(self, path: str) -> Optional[VaultItem]:
         if not os.path.exists(path):
             return None
-        # Remove existing if already present (bump to top)
         norm_path = os.path.abspath(path)
         self.items = [item for item in self.items if item.path != norm_path]
 
         item = VaultItem(norm_path)
         self.items.insert(0, item)
-        if len(self.items) > 12:
+        if len(self.items) > 20:
             old = self.items.pop()
             old.stop_teleport()
 
-        self.selected_item_index = 0
         return item
 
     def remove_item(self, item_id: str):
@@ -228,15 +233,13 @@ class DropVaultManager:
             self.items.remove(target)
             if self.active_qr_item_id == item_id:
                 self.active_qr_item_id = None
-            if self.selected_item_index >= len(self.items):
-                self.selected_item_index = max(0, len(self.items) - 1)
 
     def clear_all(self):
         for item in self.items:
             item.stop_teleport()
         self.items.clear()
         self.active_qr_item_id = None
-        self.selected_item_index = 0
+        self.stop_bundle_teleport()
 
     def get_item_by_id(self, item_id: str) -> Optional[VaultItem]:
         for item in self.items:
@@ -255,14 +258,13 @@ class DropVaultManager:
         return False
 
     def toggle_teleport(self, item_id: str):
+        self.stop_bundle_teleport()
         if self.active_qr_item_id == item_id:
-            # Stop it
             item = self.get_item_by_id(item_id)
             if item:
                 item.stop_teleport()
             self.active_qr_item_id = None
         else:
-            # If another was running, stop it
             if self.active_qr_item_id:
                 prev = self.get_item_by_id(self.active_qr_item_id)
                 if prev:
@@ -271,6 +273,58 @@ class DropVaultManager:
             if item:
                 item.start_teleport()
                 self.active_qr_item_id = item_id
+
+    def toggle_bundle_teleport(self):
+        if self.is_bundle_qr_active:
+            self.stop_bundle_teleport()
+            return
+
+        if not self.items:
+            return
+
+        # If only 1 item, share that 1 item directly
+        if len(self.items) == 1:
+            self.toggle_teleport(self.items[0].id)
+            return
+
+        # Multiple items: create a zip bundle
+        self.stop_all_teleports()
+        temp_dir = tempfile.gettempdir()
+        bundle_file = os.path.join(temp_dir, f"SysNotch_Bundle_{int(time.time())}.zip")
+        try:
+            with zipfile.ZipFile(bundle_file, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                for item in self.items:
+                    if os.path.exists(item.path):
+                        z.write(item.path, arcname=item.name)
+            self.bundle_path = bundle_file
+            self.bundle_server = TeleportServer(bundle_file)
+            self.bundle_url = self.bundle_server.start()
+            self.bundle_qr = generate_qr_pixmap(self.bundle_url)
+            self.is_bundle_qr_active = True
+        except Exception:
+            pass
+
+    def stop_bundle_teleport(self):
+        if self.bundle_server:
+            self.bundle_server.stop()
+            self.bundle_server = None
+        self.bundle_url = ""
+        self.bundle_qr = None
+        self.is_bundle_qr_active = False
+        if self.bundle_path and os.path.exists(self.bundle_path):
+            try:
+                os.remove(self.bundle_path)
+            except Exception:
+                pass
+            self.bundle_path = None
+
+    def stop_all_teleports(self):
+        if self.active_qr_item_id:
+            item = self.get_item_by_id(self.active_qr_item_id)
+            if item:
+                item.stop_teleport()
+            self.active_qr_item_id = None
+        self.stop_bundle_teleport()
 
     def cleanup(self):
         self.clear_all()
