@@ -4297,22 +4297,11 @@ class DesktopDynamicIsland(QWidget):
             self.cur_w, self.vel_w = target_w, 0.0
             self.cur_h, self.vel_h = target_h, 0.0
 
-        # Drive continuous fluid lyrics expansion progress (0.0 -> 1.0) with critically damped spring
-        target_lp = 1.0 if (self.lyrics_open and self.is_spotify_active and self.island_page_index == 0 and keep_expanded) else 0.0
-        if abs(target_lp - self.lyrics_anim_progress) > 0.001 or abs(self.vel_lyrics_anim) > 0.005:
-            spring_k = 440.0
-            spring_c = 42.0
-            for _ in range(4):
-                acc_lp = spring_k * (target_lp - self.lyrics_anim_progress) - spring_c * self.vel_lyrics_anim
-                self.vel_lyrics_anim += acc_lp * sub_dt
-                self.lyrics_anim_progress += self.vel_lyrics_anim * sub_dt
-            if abs(target_lp - self.lyrics_anim_progress) < 0.002 and abs(self.vel_lyrics_anim) < 0.01:
-                self.lyrics_anim_progress = target_lp
-                self.vel_lyrics_anim = 0.0
-        else:
-            self.lyrics_anim_progress = target_lp
-            self.vel_lyrics_anim = 0.0
-        self.lyrics_anim_progress = max(0.0, min(1.0, self.lyrics_anim_progress))
+        # Direct physical coupling of lyrics animation progress with notch width (zero latency, zero phase lag)
+        w_closed = self.expanded_w
+        w_open = getattr(self, "lyrics_expanded_w", 640.0)
+        span = max(1.0, w_open - w_closed)
+        self.lyrics_anim_progress = max(0.0, min(1.0, (self.cur_w - w_closed) / span))
 
         # Sinkronkan status animasi ke audio meter untuk menghindari COM endpoint refresh saat bergerak
         self.audio_meter._is_animating = abs(self.vel_w) > 1.0 or abs(self.vel_h) > 1.0
@@ -4403,7 +4392,8 @@ class DesktopDynamicIsland(QWidget):
             or any(v > 0.005 for v in self.btn_hover_anim.values())
             or getattr(self, "view_transition_t", 1.0) < 1.0
             or getattr(self, "volume_pulse", 0.0) > 0.005
-            or abs(target_lp - self.lyrics_anim_progress) > 0.002
+            or (self.lyrics_open and self.lyrics_anim_progress < 0.99)
+            or (not self.lyrics_open and self.lyrics_anim_progress > 0.01)
         )
         is_audio_active = self.is_playing or getattr(self, "_system_audio_active", False)
         is_hover_active = (
@@ -4543,6 +4533,8 @@ class DesktopDynamicIsland(QWidget):
             if button == "lyrics":
                 if self.is_spotify_active:
                     self.lyrics_open = not self.lyrics_open
+                    # Provide an immediate physical impulse so spring accelerates on frame 0
+                    self.vel_w = 220.0 if self.lyrics_open else -220.0
                     self.update()
                 event.accept()
                 return
@@ -5270,7 +5262,7 @@ class DesktopDynamicIsland(QWidget):
             self.btn_tab_previous_rect = QRectF(x + 2.0, btn_y, btn_hit_w, btn_hit_h)
             lp = getattr(self, "lyrics_anim_progress", 0.0)
             closed_next_x = x + w - 2.0 - btn_hit_w
-            media_divider_x = x + 16.0 + 360.0 + 14.0
+            media_divider_x = media_left + media_w_area + 14.0
             open_next_x = media_divider_x - (btn_hit_w / 2.0)
             next_nav_x = (1.0 - lp) * closed_next_x + lp * open_next_x
             self.btn_tab_next_rect = QRectF(next_nav_x, btn_y, btn_hit_w, btn_hit_h)
@@ -5341,14 +5333,19 @@ class DesktopDynamicIsland(QWidget):
                 painter.translate(-cx, -cy)
 
             media_left = x + margin
-            lp = getattr(self, "lyrics_anim_progress", 0.0)
+            w_closed = self.expanded_w
+            w_open = getattr(self, "lyrics_expanded_w", 640.0)
+            span = max(1.0, w_open - w_closed)
+            lp = max(0.0, min(1.0, (w - w_closed) / span))
+            self.lyrics_anim_progress = lp
+
             base_media_w = min(self.expanded_w, w) - (margin * 2.0)
             target_media_w = 360.0
             media_w_area = (1.0 - lp) * base_media_w + lp * target_media_w
 
-            center_closed = self.canvas_w / 2.0
-            center_open = (self.canvas_w - w) / 2.0 + (self.expanded_w / 2.0)
-            dots_center_x = (1.0 - lp) * center_closed + lp * center_open
+            # Direct physical centering: algebraically identical to canvas_w/2 when closed,
+            # and smoothly moves to media area center with 100% frame-1 physical synchronization!
+            dots_center_x = media_left + (media_w_area / 2.0)
 
             # =========================================================================
             # CASE A: PROFILE MODE (NO MEDIA DETECTED - SNUG 124px)
