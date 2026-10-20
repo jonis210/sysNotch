@@ -128,6 +128,9 @@ from PyQt6.QtWidgets import (
     QFileIconProvider,
 )
 
+import drop_vault
+from PyQt6.QtCore import QUrl, QMimeData
+from PyQt6.QtGui import QDrag
 from media_controller import WindowsMediaController
 from lyrics_controller import LyricsFetcher
 from youtube_bridge import YouTubeBridge
@@ -1057,6 +1060,15 @@ class DesktopDynamicIsland(QWidget):
 
         self._setup_tray()
         self.youtube_bridge = YouTubeBridge(self)
+        self.drop_vault = drop_vault.DropVaultManager()
+        self.setAcceptDrops(True)
+        self.is_drag_hovered = False
+        self.drag_start_pos = None
+        self.dragged_vault_item = None
+        self.btn_vault_clear_rect = QRectF()
+        self.btn_vault_qr_close_rect = QRectF()
+        self.vault_item_rects = []
+        self._tab_1_content_h = 168.0
         self.youtube_bridge.ad_state_changed.connect(self.on_youtube_ad_state)
         self.youtube_bridge.ad_state_stale_changed.connect(self.on_youtube_ad_state_stale)
         if not self.youtube_bridge.start():
@@ -1591,7 +1603,14 @@ class DesktopDynamicIsland(QWidget):
                 4000,
             )
 
+    def closeEvent(self, event):
+        if hasattr(self, "drop_vault"):
+            self.drop_vault.cleanup()
+        super().closeEvent(event)
+
     def exit_app(self):
+        if hasattr(self, "drop_vault"):
+            self.drop_vault.cleanup()
         self.media_controller.stop()
         if self.media_controller.isRunning():
             self.media_controller.wait(2000)
@@ -2111,6 +2130,24 @@ class DesktopDynamicIsland(QWidget):
         for idx, rect in enumerate(self.tab_dots_rects):
             if rect.contains(local_pos):
                 return f"tab_dot:{idx}"
+
+        # Hit testing for Tab 2 (The Drop Vault)
+        if self.island_page_index == 1:
+            if getattr(self, "btn_vault_qr_close_rect", QRectF()).contains(local_pos):
+                return "vault_qr_close"
+            if getattr(self, "btn_vault_clear_rect", QRectF()).contains(local_pos):
+                return "vault_clear"
+            for item_id, card_rect, path_btn_rect, qr_btn_rect, remove_btn_rect in getattr(self, "vault_item_rects", []):
+                if remove_btn_rect.contains(local_pos):
+                    return f"vault_remove:{item_id}"
+                if path_btn_rect.contains(local_pos):
+                    return f"vault_copy_path:{item_id}"
+                if qr_btn_rect.contains(local_pos):
+                    return f"vault_qr:{item_id}"
+                if card_rect.contains(local_pos):
+                    return f"vault_card:{item_id}"
+            return None
+
         if self.island_page_index != 0:
             return None
         skip_ready = self.youtube_ad_detected and self.youtube_can_skip
@@ -4426,6 +4463,46 @@ class DesktopDynamicIsland(QWidget):
                 self._close_appearance_settings(save=True)
                 event.accept()
                 return
+            # The Drop Vault button actions
+            if button == "vault_clear":
+                self.drop_vault.clear_all()
+                self.update()
+                event.accept()
+                return
+            if button == "vault_qr_close":
+                if self.drop_vault.active_qr_item_id:
+                    target_it = self.drop_vault.get_item_by_id(self.drop_vault.active_qr_item_id)
+                    if target_it:
+                        target_it.stop_teleport()
+                    self.drop_vault.active_qr_item_id = None
+                self.update()
+                event.accept()
+                return
+            if button and button.startswith("vault_copy_path:"):
+                item_id = button.removeprefix("vault_copy_path:")
+                self.drop_vault.copy_path(item_id)
+                self.update()
+                event.accept()
+                return
+            if button and button.startswith("vault_qr:"):
+                item_id = button.removeprefix("vault_qr:")
+                self.drop_vault.toggle_teleport(item_id)
+                self.update()
+                event.accept()
+                return
+            if button and button.startswith("vault_remove:"):
+                item_id = button.removeprefix("vault_remove:")
+                self.drop_vault.remove_item(item_id)
+                self.update()
+                event.accept()
+                return
+            if button and button.startswith("vault_card:"):
+                item_id = button.removeprefix("vault_card:")
+                self.drag_start_pos = event.position().toPoint()
+                self.dragged_vault_item = self.drop_vault.get_item_by_id(item_id)
+                event.accept()
+                return
+
             if button in ("tab_previous", "tab_next"):
                 direction = -1 if button == "tab_previous" else 1
                 new_idx = (self.island_page_index + direction) % self.total_pages
@@ -4503,6 +4580,20 @@ class DesktopDynamicIsland(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        # Drag-out stashed item to external apps (Discord, Photoshop, Explorer)
+        if getattr(self, "drag_start_pos", None) and getattr(self, "dragged_vault_item", None):
+            if (event.position().toPoint() - self.drag_start_pos).manhattanLength() > QApplication.startDragDistance():
+                drag = QDrag(self)
+                mime = QMimeData()
+                mime.setUrls([QUrl.fromLocalFile(self.dragged_vault_item.path)])
+                drag.setMimeData(mime)
+                if self.dragged_vault_item.thumbnail and not self.dragged_vault_item.thumbnail.isNull():
+                    drag.setPixmap(self.dragged_vault_item.thumbnail)
+                self.drag_start_pos = None
+                self.dragged_vault_item = None
+                drag.exec(Qt.DropAction.CopyAction)
+                event.accept()
+                return
         if getattr(self, "is_seeking", False):
             self._seek_from_pos(event.position().x())
             self.update()
@@ -4600,6 +4691,282 @@ class DesktopDynamicIsland(QWidget):
         self._cached_notch_key = key
         self._cached_notch_path = path
         return path
+
+    # =========================================================================
+    # THE DROP VAULT: DRAG & DROP EVENT HANDLERS
+    # =========================================================================
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls() or event.mimeData().hasText():
+            event.acceptProposedAction()
+            self.is_drag_hovered = True
+            self.update()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls() or event.mimeData().hasText():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event):
+        self.is_drag_hovered = False
+        self.update()
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event):
+        self.is_drag_hovered = False
+        added_count = 0
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                local_path = url.toLocalFile()
+                if local_path and os.path.exists(local_path):
+                    self.drop_vault.add_path(local_path)
+                    added_count += 1
+        
+        if added_count > 0:
+            if self.island_page_index != 1:
+                self.prev_island_page_index = self.island_page_index
+                self.island_page_index = 1
+                self.tab_transition_t = 0.0
+            event.acceptProposedAction()
+            self.update()
+        else:
+            super().dropEvent(event)
+
+    # =========================================================================
+    # THE DROP VAULT: TAB 2 RENDERING
+    # =========================================================================
+    def _paint_drop_vault(self, painter, expanded_x: float, expanded_w: float, opacity: float = 1.0):
+        """Render Tab 2: The Drop Vault shelf, stashed files, and QR teleport overlay."""
+        self.btn_vault_clear_rect = QRectF()
+        self.btn_vault_qr_close_rect = QRectF()
+        self.vault_item_rects = []
+
+        painter.save()
+        painter.setOpacity(painter.opacity() * max(0.0, min(1.0, opacity)))
+
+        margin = 16.0
+        content_x = expanded_x + margin
+        content_w = expanded_w - (margin * 2.0)
+        h = self.cur_h
+
+        # 1. Top status bar
+        self._paint_top_status_bar(painter, expanded_x, expanded_w, margin, draw_clock=False)
+
+        # 2. Shelf Header
+        header_y = 36.0
+        painter.setFont(_font("Segoe UI", 9.5, QFont.Weight.Bold))
+        painter.setPen(QColor("#FFFFFF"))
+        painter.drawText(QRectF(content_x, header_y, 115.0, 18.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "The Drop Vault")
+
+        num_items = len(self.drop_vault.items)
+        badge_x = content_x + 115.0
+        badge_text = f"{num_items} File" if num_items > 0 else "Drop Zone"
+        badge_w = 48.0 if num_items > 0 else 64.0
+        badge_rect = QRectF(badge_x, header_y + 1.0, badge_w, 16.0)
+        painter.setBrush(QBrush(QColor(56, 189, 248, 25)))
+        painter.setPen(QPen(QColor(56, 189, 248, 80), 0.8))
+        painter.drawRoundedRect(badge_rect, 8.0, 8.0)
+        painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.Bold))
+        painter.setPen(QColor("#38BDF8"))
+        painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, badge_text)
+
+        # Clear button on the right if files exist
+        if num_items > 0:
+            clear_w = 66.0
+            self.btn_vault_clear_rect = QRectF(content_x + content_w - clear_w, header_y, clear_w, 18.0)
+            clear_hvd = self.hovered_btn == "vault_clear"
+            painter.setBrush(QBrush(QColor(255, 255, 255, 18 if clear_hvd else 10)))
+            painter.setPen(QPen(QColor(255, 255, 255, 30 if clear_hvd else 18), 0.8))
+            painter.drawRoundedRect(self.btn_vault_clear_rect, 9.0, 9.0)
+            painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.Medium))
+            painter.setPen(QColor("#CBD5E1" if clear_hvd else "#94A3B8"))
+            painter.drawText(self.btn_vault_clear_rect, Qt.AlignmentFlag.AlignCenter, "Kosongkan")
+
+        # 3. Main Vault Content Area
+        shelf_y = 56.0
+        shelf_h = min(84.0, max(72.0, h - shelf_y - 24.0))
+
+        # Check if QR Teleport modal is active
+        active_qr_id = self.drop_vault.active_qr_item_id
+        active_item = self.drop_vault.get_item_by_id(active_qr_id) if active_qr_id else None
+
+        if active_item and active_item.teleport_qr:
+            # --- MODAL: QR TELEPORT OVERLAY ---
+            modal_rect = QRectF(content_x, shelf_y, content_w, shelf_h)
+            painter.setBrush(QBrush(QColor(18, 24, 38, 245)))
+            painter.setPen(QPen(QColor(56, 189, 248, 90), 1.0))
+            painter.drawRoundedRect(modal_rect, 12.0, 12.0)
+
+            # QR Code Image with white border squircle
+            qr_side = min(66.0, shelf_h - 14.0)
+            qr_bg = QRectF(modal_rect.left() + 7.0, modal_rect.top() + (shelf_h - qr_side)/2.0, qr_side, qr_side)
+            painter.setBrush(QBrush(QColor("#FFFFFF")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(qr_bg, 7.0, 7.0)
+            painter.drawPixmap(int(qr_bg.left() + 2), int(qr_bg.top() + 2), int(qr_side - 4), int(qr_side - 4), active_item.teleport_qr)
+
+            # Instructions
+            text_x = qr_bg.right() + 10.0
+            avail_tw = modal_rect.right() - text_x - 56.0
+            painter.setFont(_font("Segoe UI", 8.6, QFont.Weight.Bold))
+            painter.setPen(QColor("#38BDF8"))
+            painter.drawText(QRectF(text_x, modal_rect.top() + 8.0, avail_tw, 16.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "📱 Teleport ke HP")
+
+            painter.setFont(_font("Segoe UI", 7.4, QFont.Weight.Medium))
+            painter.setPen(QColor("#CBD5E1"))
+            painter.drawText(QRectF(text_x, modal_rect.top() + 25.0, avail_tw, 15.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "Scan kamera HP (Wi-Fi sama)")
+
+            painter.setFont(_font("Consolas", 6.8, QFont.Weight.Normal))
+            painter.setPen(QColor("#64748B"))
+            elided_url = QFontMetricsF(painter.font()).elidedText(active_item.teleport_url, Qt.TextElideMode.ElideMiddle, avail_tw)
+            painter.drawText(QRectF(text_x, modal_rect.top() + 41.0, avail_tw, 14.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_url)
+
+            # Close button
+            self.btn_vault_qr_close_rect = QRectF(modal_rect.right() - 52.0, modal_rect.top() + (shelf_h - 24.0)/2.0, 46.0, 24.0)
+            c_hvd = self.hovered_btn == "vault_qr_close"
+            painter.setBrush(QBrush(QColor(255, 255, 255, 22 if c_hvd else 14)))
+            painter.setPen(QPen(QColor(255, 255, 255, 35 if c_hvd else 20), 0.8))
+            painter.drawRoundedRect(self.btn_vault_qr_close_rect, 6.0, 6.0)
+            painter.setFont(_font("Segoe UI", 7.4, QFont.Weight.Medium))
+            painter.setPen(QColor("#FFFFFF" if c_hvd else "#94A3B8"))
+            painter.drawText(self.btn_vault_qr_close_rect, Qt.AlignmentFlag.AlignCenter, "✕ Tutup")
+
+        elif num_items == 0:
+            # --- EMPTY VAULT: DASHED DROP ZONE ---
+            drop_rect = QRectF(content_x, shelf_y, content_w, shelf_h)
+            is_active_drop = getattr(self, "is_drag_hovered", False)
+            
+            dash_color = QColor("#38BDF8") if is_active_drop else QColor(56, 189, 248, 80)
+            dash_pen = QPen(dash_color, 1.4 if is_active_drop else 1.1, Qt.PenStyle.DashLine, Qt.PenCapStyle.RoundCap)
+            painter.setPen(dash_pen)
+            painter.setBrush(QBrush(QColor(56, 189, 248, 20 if is_active_drop else 6)))
+            painter.drawRoundedRect(drop_rect, 12.0, 12.0)
+
+            # Suction icon & arrow
+            icon_cx = drop_rect.center().x()
+            icon_cy = drop_rect.top() + (shelf_h * 0.34)
+
+            # Tray
+            painter.setPen(QPen(QColor("#38BDF8"), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            tray = QPainterPath()
+            tray.moveTo(icon_cx - 9.0, icon_cy + 1.0)
+            tray.lineTo(icon_cx - 9.0, icon_cy + 6.0)
+            tray.lineTo(icon_cx + 9.0, icon_cy + 6.0)
+            tray.lineTo(icon_cx + 9.0, icon_cy + 1.0)
+            painter.drawPath(tray)
+
+            # Downward Arrow
+            arrow = QPainterPath()
+            arrow.moveTo(icon_cx, icon_cy - 7.0)
+            arrow.lineTo(icon_cx, icon_cy + 2.0)
+            arrow.moveTo(icon_cx - 3.5, icon_cy - 1.5)
+            arrow.lineTo(icon_cx, icon_cy + 2.0)
+            arrow.lineTo(icon_cx + 3.5, icon_cy - 1.5)
+            painter.drawPath(arrow)
+
+            # Labels
+            painter.setFont(_font("Segoe UI", 8.4, QFont.Weight.DemiBold))
+            painter.setPen(QColor("#38BDF8" if is_active_drop else "#E2E8F0"))
+            label_text = "LEPASKAN UNTUK MENGGANTUNG FILE" if is_active_drop else "Tarik & Lepas File ke Sini"
+            painter.drawText(QRectF(content_x, icon_cy + 10.0, content_w, 16.0), Qt.AlignmentFlag.AlignCenter, label_text)
+
+            painter.setFont(_font("Segoe UI", 7.0, QFont.Weight.Normal))
+            painter.setPen(QColor("#94A3B8" if is_active_drop else "#64748B"))
+            painter.drawText(QRectF(content_x, icon_cy + 26.0, content_w, 14.0), Qt.AlignmentFlag.AlignCenter, "QR Teleport ke HP • 1-Klik Copy Path • Drag-Out ke Mana Saja")
+
+        else:
+            # --- POPULATED VAULT: STASHED CARDS ---
+            item = self.drop_vault.items[0]
+            card_rect = QRectF(content_x, shelf_y, content_w, shelf_h)
+            
+            card_hvd = self.hovered_btn == f"vault_card:{item.id}"
+            painter.setBrush(QBrush(QColor(255, 255, 255, 16 if card_hvd else 11)))
+            painter.setPen(QPen(QColor(56, 189, 248, 60 if card_hvd else 20), 0.8))
+            painter.drawRoundedRect(card_rect, 11.0, 11.0)
+
+            # Thumbnail or type badge (44x44 squircle)
+            thumb_side = 44.0
+            icon_rect = QRectF(card_rect.left() + 9.0, card_rect.top() + (shelf_h - thumb_side)/2.0, thumb_side, thumb_side)
+            
+            if item.thumbnail and not item.thumbnail.isNull():
+                thumb_path = QPainterPath()
+                thumb_path.addRoundedRect(icon_rect, 8.0, 8.0)
+                painter.save()
+                painter.setClipPath(thumb_path)
+                painter.drawPixmap(int(icon_rect.left()), int(icon_rect.top()), int(thumb_side), int(thumb_side), item.thumbnail)
+                painter.restore()
+                painter.setPen(QPen(QColor(255, 255, 255, 30), 0.8))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRoundedRect(icon_rect, 8.0, 8.0)
+            else:
+                cat_colors = {
+                    "code": QColor("#38BDF8"),
+                    "doc": QColor("#F87171"),
+                    "image": QColor("#A78BFA"),
+                    "video": QColor("#F472B6"),
+                    "audio": QColor("#34D399"),
+                    "archive": QColor("#FBBF24"),
+                }
+                c_accent = cat_colors.get(item.category, QColor("#94A3B8"))
+                painter.setBrush(QBrush(QColor(c_accent.red(), c_accent.green(), c_accent.blue(), 25)))
+                painter.setPen(QPen(QColor(c_accent.red(), c_accent.green(), c_accent.blue(), 75), 0.8))
+                painter.drawRoundedRect(icon_rect, 8.0, 8.0)
+                painter.setFont(_font("Segoe UI", 8.0, QFont.Weight.Bold))
+                painter.setPen(c_accent)
+                ext_tag = item.ext.replace(".", "").upper()[:4] or "FILE"
+                painter.drawText(icon_rect, Qt.AlignmentFlag.AlignCenter, ext_tag)
+
+            # File name and size
+            text_x = icon_rect.right() + 10.0
+            actions_w = 120.0
+            avail_title_w = max(40.0, card_rect.right() - text_x - actions_w - 6.0)
+
+            painter.setFont(_font("Segoe UI", 8.8, QFont.Weight.Bold))
+            painter.setPen(QColor("#FFFFFF"))
+            elided_name = QFontMetricsF(painter.font()).elidedText(item.name, Qt.TextElideMode.ElideMiddle, avail_title_w)
+            painter.drawText(QRectF(text_x, card_rect.top() + (shelf_h * 0.22), avail_title_w, 18.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_name)
+
+            painter.setFont(_font("Segoe UI", 7.4, QFont.Weight.Normal))
+            painter.setPen(QColor("#94A3B8"))
+            meta_str = f"{item.size_str} • {item.ext.upper().replace('.', '') or 'File'}"
+            painter.drawText(QRectF(text_x, card_rect.top() + (shelf_h * 0.52), avail_title_w, 16.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, meta_str)
+
+            # Action Buttons: [ 📋 Path ] and [ 📱 QR ]
+            btn_y = card_rect.top() + (shelf_h - 25.0)/2.0
+            
+            # Path button
+            btn_path_rect = QRectF(card_rect.right() - 118.0, btn_y, 56.0, 25.0)
+            is_copied = time.monotonic() < getattr(item, "feedback_copied_until", 0.0)
+            p_hvd = self.hovered_btn == f"vault_copy_path:{item.id}"
+            
+            p_bg = QColor(34, 197, 94, 40) if is_copied else QColor(255, 255, 255, 20 if p_hvd else 12)
+            p_border = QColor(34, 197, 94, 180) if is_copied else QColor(255, 255, 255, 30 if p_hvd else 18)
+            painter.setBrush(QBrush(p_bg))
+            painter.setPen(QPen(p_border, 0.8))
+            painter.drawRoundedRect(btn_path_rect, 6.5, 6.5)
+            painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.Bold if is_copied else QFont.Weight.Medium))
+            painter.setPen(QColor("#4ADE80") if is_copied else QColor("#FFFFFF" if p_hvd else "#CBD5E1"))
+            painter.drawText(btn_path_rect, Qt.AlignmentFlag.AlignCenter, "✓ Salin" if is_copied else "📋 Path")
+
+            # QR Button
+            btn_qr_rect = QRectF(card_rect.right() - 58.0, btn_y, 50.0, 25.0)
+            qr_hvd = self.hovered_btn == f"vault_qr:{item.id}"
+            painter.setBrush(QBrush(QColor(56, 189, 248, 45 if qr_hvd else 25)))
+            painter.setPen(QPen(QColor(56, 189, 248, 160 if qr_hvd else 85), 0.8))
+            painter.drawRoundedRect(btn_qr_rect, 6.5, 6.5)
+            painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.Bold))
+            painter.setPen(QColor("#38BDF8"))
+            painter.drawText(btn_qr_rect, Qt.AlignmentFlag.AlignCenter, "📱 QR")
+
+            # Remove button (✕)
+            remove_rect = QRectF(card_rect.right() - 14.0, card_rect.top() + 3.0, 11.0, 11.0)
+            
+            # Record hitboxes
+            self.vault_item_rects.append((item.id, card_rect, btn_path_rect, btn_qr_rect, remove_rect))
+
+        painter.restore()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -4829,7 +5196,10 @@ class DesktopDynamicIsland(QWidget):
                     painter.translate(cx, cy)
                     painter.scale(tab_scale, tab_scale)
                     painter.translate(-cx, -cy)
-                self._paint_empty_tab_content(painter, x, w, cur_tab, opacity=tab_op)
+                if cur_tab == 1:
+                    self._paint_drop_vault(painter, x, w, opacity=tab_op)
+                else:
+                    self._paint_empty_tab_content(painter, x, w, cur_tab, opacity=tab_op)
                 painter.restore()
 
             # 3. Dynamic scale & fade for Page 0 (Media / Profile)

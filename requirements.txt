@@ -4,3 +4,4 @@ winrt-Windows.Foundation.Collections>=3.2.1
 winrt-Windows.Media.Control>=3.2.1
 winrt-Windows.Storage.Streams>=3.2.1
 psutil>=5.9.0
+qrcode>=8.0.0
