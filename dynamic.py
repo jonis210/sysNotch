@@ -5254,21 +5254,34 @@ class DesktopDynamicIsland(QWidget):
             painter.setClipPath(notch_path)
             media_x = x
             media_w = min(self.expanded_w, w)
+            header_center_y = 70.0  # Mathematically & optically centered between top status bar (y=26) and bottom controls (y=114)
+            margin = 16.0
+
+            media_left = x + margin
+            w_closed = self.expanded_w
+            w_open = getattr(self, "lyrics_expanded_w", 640.0)
+            span = max(1.0, w_open - w_closed)
+            lp = max(0.0, min(1.0, (w - w_closed) / span))
+            self.lyrics_anim_progress = lp
+
+            base_media_w = min(self.expanded_w, w) - (margin * 2.0)
+            target_media_w = 360.0
+            media_w_area = (1.0 - lp) * base_media_w + lp * target_media_w
+
+            # Direct physical centering: algebraically identical to canvas_w/2 when closed,
+            # and smoothly moves to media area center with 100% frame-1 physical synchronization!
+            dots_center_x = media_left + (media_w_area / 2.0)
 
             # Previous & Next tab button hitboxes (centered vertically on the island)
             btn_hit_w = 24.0
             btn_hit_h = 50.0
             btn_y = (h - btn_hit_h) / 2.0
             self.btn_tab_previous_rect = QRectF(x + 2.0, btn_y, btn_hit_w, btn_hit_h)
-            lp = getattr(self, "lyrics_anim_progress", 0.0)
             closed_next_x = x + w - 2.0 - btn_hit_w
             media_divider_x = media_left + media_w_area + 14.0
             open_next_x = media_divider_x - (btn_hit_w / 2.0)
             next_nav_x = (1.0 - lp) * closed_next_x + lp * open_next_x
             self.btn_tab_next_rect = QRectF(next_nav_x, btn_y, btn_hit_w, btn_hit_h)
-
-            header_center_y = 70.0  # Mathematically & optically centered between top status bar (y=26) and bottom controls (y=114)
-            margin = 16.0
 
             # 1. Top Notification & Status Bar (Battery, CPU, RAM, Wi-Fi, Bluetooth, Gradient Settings Gear)
             self._paint_top_status_bar(painter, x, w, margin, draw_clock=False)
@@ -5332,20 +5345,7 @@ class DesktopDynamicIsland(QWidget):
                 painter.scale(tab_scale, tab_scale)
                 painter.translate(-cx, -cy)
 
-            media_left = x + margin
-            w_closed = self.expanded_w
-            w_open = getattr(self, "lyrics_expanded_w", 640.0)
-            span = max(1.0, w_open - w_closed)
-            lp = max(0.0, min(1.0, (w - w_closed) / span))
-            self.lyrics_anim_progress = lp
-
-            base_media_w = min(self.expanded_w, w) - (margin * 2.0)
-            target_media_w = 360.0
-            media_w_area = (1.0 - lp) * base_media_w + lp * target_media_w
-
-            # Direct physical centering: algebraically identical to canvas_w/2 when closed,
-            # and smoothly moves to media area center with 100% frame-1 physical synchronization!
-            dots_center_x = media_left + (media_w_area / 2.0)
+            # Layout parameters (media_left, media_w_area, dots_center_x, lp) are precomputed above
 
             # =========================================================================
             # CASE A: PROFILE MODE (NO MEDIA DETECTED - SNUG 124px)
