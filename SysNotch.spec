@@ -1,12 +1,27 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_all
 
+winrt_datas, winrt_binaries, winrt_hidden = collect_all('winrt')
+
+datas = [('youtube_extension', 'youtube_extension')] + winrt_datas
+binaries = winrt_binaries
+hiddenimports = [
+    'winrt.windows.foundation',
+    'winrt.windows.foundation.collections',
+    'winrt.windows.media.control',
+    'winrt.windows.storage.streams',
+    'psutil',
+    'qrcode',
+    'drop_vault',
+    'media_controller',
+] + winrt_hidden
 
 a = Analysis(
     ['dynamic.py'],
     pathex=[],
-    binaries=[],
-    datas=[('youtube_extension', 'youtube_extension')],
-    hiddenimports=['winrt.windows.foundation', 'winrt.windows.foundation.collections', 'winrt.windows.media.control', 'winrt.windows.storage.streams', 'psutil', 'qrcode'],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
