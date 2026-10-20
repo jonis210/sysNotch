@@ -899,6 +899,8 @@ class DesktopDynamicIsland(QWidget):
         self.page_scroll_pos = 0.0
         self.page_scroll_vel = 0.0
         self.lyrics_smooth_index = 0.0
+        self.lyrics_anim_progress = 0.0
+        self.vel_lyrics_anim = 0.0
         self.click_through_active = False
         self.media_state = "connecting"
         self.has_media = False
@@ -4295,6 +4297,23 @@ class DesktopDynamicIsland(QWidget):
             self.cur_w, self.vel_w = target_w, 0.0
             self.cur_h, self.vel_h = target_h, 0.0
 
+        # Drive continuous fluid lyrics expansion progress (0.0 -> 1.0) with critically damped spring
+        target_lp = 1.0 if (self.lyrics_open and self.is_spotify_active and self.island_page_index == 0 and keep_expanded) else 0.0
+        if abs(target_lp - self.lyrics_anim_progress) > 0.001 or abs(self.vel_lyrics_anim) > 0.005:
+            spring_k = 440.0
+            spring_c = 42.0
+            for _ in range(4):
+                acc_lp = spring_k * (target_lp - self.lyrics_anim_progress) - spring_c * self.vel_lyrics_anim
+                self.vel_lyrics_anim += acc_lp * sub_dt
+                self.lyrics_anim_progress += self.vel_lyrics_anim * sub_dt
+            if abs(target_lp - self.lyrics_anim_progress) < 0.002 and abs(self.vel_lyrics_anim) < 0.01:
+                self.lyrics_anim_progress = target_lp
+                self.vel_lyrics_anim = 0.0
+        else:
+            self.lyrics_anim_progress = target_lp
+            self.vel_lyrics_anim = 0.0
+        self.lyrics_anim_progress = max(0.0, min(1.0, self.lyrics_anim_progress))
+
         # Sinkronkan status animasi ke audio meter untuk menghindari COM endpoint refresh saat bergerak
         self.audio_meter._is_animating = abs(self.vel_w) > 1.0 or abs(self.vel_h) > 1.0
 
@@ -4384,6 +4403,7 @@ class DesktopDynamicIsland(QWidget):
             or any(v > 0.005 for v in self.btn_hover_anim.values())
             or getattr(self, "view_transition_t", 1.0) < 1.0
             or getattr(self, "volume_pulse", 0.0) > 0.005
+            or abs(target_lp - self.lyrics_anim_progress) > 0.002
         )
         is_audio_active = self.is_playing or getattr(self, "_system_audio_active", False)
         is_hover_active = (
@@ -5248,13 +5268,11 @@ class DesktopDynamicIsland(QWidget):
             btn_hit_h = 50.0
             btn_y = (h - btn_hit_h) / 2.0
             self.btn_tab_previous_rect = QRectF(x + 2.0, btn_y, btn_hit_w, btn_hit_h)
-            is_lyrics_expanded = self.lyrics_open and self.is_spotify_active and (w > self.expanded_w)
-            if is_lyrics_expanded:
-                # Placed precisely in the gap at the right boundary of the media controls area (before the lyrics panel)
-                media_divider_x = x + 16.0 + 360.0 + 14.0
-                next_nav_x = media_divider_x - (btn_hit_w / 2.0)
-            else:
-                next_nav_x = x + w - 2.0 - btn_hit_w
+            lp = getattr(self, "lyrics_anim_progress", 0.0)
+            closed_next_x = x + w - 2.0 - btn_hit_w
+            media_divider_x = x + 16.0 + 360.0 + 14.0
+            open_next_x = media_divider_x - (btn_hit_w / 2.0)
+            next_nav_x = (1.0 - lp) * closed_next_x + lp * open_next_x
             self.btn_tab_next_rect = QRectF(next_nav_x, btn_y, btn_hit_w, btn_hit_h)
 
             header_center_y = 70.0  # Mathematically & optically centered between top status bar (y=26) and bottom controls (y=114)
@@ -5323,12 +5341,14 @@ class DesktopDynamicIsland(QWidget):
                 painter.translate(-cx, -cy)
 
             media_left = x + margin
-            is_lyrics_expanded = self.lyrics_open and self.is_spotify_active and (w > self.expanded_w)
-            media_w_area = 360.0 if is_lyrics_expanded else (w - margin * 2.0)
-            if is_lyrics_expanded:
-                dots_center_x = (self.canvas_w - w) / 2.0 + (self.expanded_w / 2.0)
-            else:
-                dots_center_x = self.canvas_w / 2.0
+            lp = getattr(self, "lyrics_anim_progress", 0.0)
+            base_media_w = min(self.expanded_w, w) - (margin * 2.0)
+            target_media_w = 360.0
+            media_w_area = (1.0 - lp) * base_media_w + lp * target_media_w
+
+            center_closed = self.canvas_w / 2.0
+            center_open = (self.canvas_w - w) / 2.0 + (self.expanded_w / 2.0)
+            dots_center_x = (1.0 - lp) * center_closed + lp * center_open
 
             # =========================================================================
             # CASE A: PROFILE MODE (NO MEDIA DETECTED - SNUG 124px)
@@ -5598,15 +5618,23 @@ class DesktopDynamicIsland(QWidget):
                 painter.setPen(QPen(QColor(56, 189, 248, 200), 1.0))
                 painter.drawEllipse(QPointF(vol_track_x + vol_val_w, cy_row), 3.5, 3.5)
 
-                # 5b. Lyrics Button (FAR RIGHT)
+                # 5b. Lyrics Button (FAR RIGHT - Butter-smooth color & glow transition)
                 if self.is_spotify_active:
                     lyr_w = 26.0
                     self.btn_lyrics_rect = QRectF(media_right - lyr_w, ctrl_y, lyr_w, 26.0)
-                    lyrics_active = self.lyrics_open
                     lyr_hover_t = self.btn_hover_anim.get("lyrics", 0.0)
-                    bg_col = QColor(56, 189, 248, int(40 + 20 * lyr_hover_t)) if lyrics_active else QColor(255, 255, 255, int(12 + 16 * lyr_hover_t))
-                    border_col = QColor(56, 189, 248, int(180 + 40 * lyr_hover_t)) if lyrics_active else QColor(255, 255, 255, int(20 + 25 * lyr_hover_t))
-                    note_col = QColor("#38BDF8") if lyrics_active else _interpolate_color(QColor("#E2E8F0"), QColor("#FFFFFF"), lyr_hover_t)
+                    bg_inactive = QColor(255, 255, 255, int(12 + 16 * lyr_hover_t))
+                    bg_active = QColor(56, 189, 248, int(40 + 20 * lyr_hover_t))
+                    bg_col = _interpolate_color(bg_inactive, bg_active, lp)
+
+                    border_inactive = QColor(255, 255, 255, int(20 + 25 * lyr_hover_t))
+                    border_active = QColor(56, 189, 248, int(180 + 40 * lyr_hover_t))
+                    border_col = _interpolate_color(border_inactive, border_active, lp)
+
+                    note_inactive = _interpolate_color(QColor("#E2E8F0"), QColor("#FFFFFF"), lyr_hover_t)
+                    note_active = QColor("#38BDF8")
+                    note_col = _interpolate_color(note_inactive, note_active, lp)
+
                     painter.setBrush(QBrush(bg_col))
                     painter.setPen(QPen(border_col, 0.8))
                     painter.drawRoundedRect(self.btn_lyrics_rect, 7.5, 7.5)
@@ -5674,13 +5702,15 @@ class DesktopDynamicIsland(QWidget):
                     self._draw_vector_next(painter, next_cx, cy_row, next_col)
 
             # =========================================================================
-            # CASE C: LYRICS SIDE DRAWER (WHEN w > self.expanded_w)
+            # CASE C: LYRICS SIDE DRAWER (SMOOTH SLIDE & FADE DRIVEN BY lp)
             # =========================================================================
-            if is_lyrics_expanded:
+            if lp > 0.005:
+                painter.save()
+                painter.setOpacity(painter.opacity() * lp)
                 divider_x = media_left + media_w_area + 14.0
                 div_grad = QLinearGradient(divider_x, 34.0, divider_x, h - 18.0)
                 div_grad.setColorAt(0.0, QColor(255, 255, 255, 0))
-                div_grad.setColorAt(0.5, QColor(255, 255, 255, 22))
+                div_grad.setColorAt(0.5, QColor(255, 255, 255, int(22 * lp)))
                 div_grad.setColorAt(1.0, QColor(255, 255, 255, 0))
                 painter.setPen(QPen(QBrush(div_grad), 1.0))
                 painter.drawLine(QPointF(divider_x, 34.0), QPointF(divider_x, h - 18.0))
@@ -5688,14 +5718,11 @@ class DesktopDynamicIsland(QWidget):
                 lyr_x = divider_x + 16.0
                 lyr_w = max(20.0, (x + w) - lyr_x - margin)
                 self._paint_side_lyrics_panel(painter, QRectF(lyr_x, 0.0, lyr_w, h))
+                painter.restore()
 
             painter.restore()  # Restores Page 0 slide & fade transform
             indicator_y = max(30.0, h - 14.0)
-            # Smoothly follow the center of the media controls throughout side drawer animation
-            if self.lyrics_open and self.is_spotify_active and w > self.expanded_w:
-                dots_center_x = (self.canvas_w - w) / 2.0 + (self.expanded_w / 2.0)
-            else:
-                dots_center_x = self.canvas_w / 2.0
+            # Smoothly follow the center of the media controls throughout side drawer animation (smoothly driven by lp)
             self._paint_page_navigation(painter, indicator_y, dots_center_x)
 
             if not self.settings_open:
