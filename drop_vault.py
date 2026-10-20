@@ -9,7 +9,7 @@ import urllib.parse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from typing import Optional, List
 
-from PyQt6.QtCore import Qt, QRectF, QPointF
+from PyQt6.QtCore import Qt, QRectF, QPointF, QUrl, QMimeData
 from PyQt6.QtGui import QImage, QPixmap, QColor, QPainter, QPainterPath, QPen, QBrush
 from PyQt6.QtWidgets import QApplication
 
@@ -255,6 +255,19 @@ class DropVaultManager:
                 clip.setText(item.path)
                 item.feedback_copied_until = time.monotonic() + 2.0
                 return True
+        return False
+
+    def cut_file(self, item_id: str) -> bool:
+        item = self.get_item_by_id(item_id)
+        if item and os.path.exists(item.path):
+            clip = QApplication.clipboard()
+            if clip:
+                mime = QMimeData()
+                mime.setUrls([QUrl.fromLocalFile(item.path)])
+                mime.setText(item.path)
+                clip.setMimeData(mime)
+            self.remove_item(item_id)
+            return True
         return False
 
     def toggle_teleport(self, item_id: str):
