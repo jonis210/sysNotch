@@ -827,12 +827,12 @@ class DesktopDynamicIsland(QWidget):
         for editor in (self.profile_name_input, self.profile_status_input):
             editor.setStyleSheet("""
                 QLineEdit {
-                    color: #e8edf5; background: #111722;
-                    border: 1px solid #354052; border-radius: 8px;
+                    color: #F1F5F9; background: rgba(255, 255, 255, 12);
+                    border: 1px solid rgba(255, 255, 255, 24); border-radius: 6px;
                     padding: 2px 8px; font: 8.5pt "Segoe UI";
-                    selection-background-color: #5267c9;
+                    selection-background-color: #38BDF8;
                 }
-                QLineEdit:focus { border: 1px solid #00f5ff; }
+                QLineEdit:focus { border: 1.2px solid #38BDF8; background: rgba(255, 255, 255, 20); }
             """)
             editor.hide()
 
@@ -971,6 +971,8 @@ class DesktopDynamicIsland(QWidget):
         self.vol_group_rect = QRectF()
         self.vol_track_rect = QRectF()
         self.is_dragging_volume = False
+        self.is_seeking = False
+        self.seek_rect = QRectF()
         self.volume_pulse = 0.0
         self.current_volume_scalar = 0.5
         self.is_audio_muted = False
@@ -1478,34 +1480,34 @@ class DesktopDynamicIsland(QWidget):
 
     def _paint_profile_editor(self, painter, expanded_x: float, expanded_w: float):
         """Paint an authentic inline profile editor with Name and Status fields inside the island."""
-        self.profile_close_rect = QRectF(expanded_x + expanded_w - 40.0, 8.0, 22.0, 22.0)
+        self.profile_close_rect = QRectF(expanded_x + expanded_w - 38.0, 8.0, 20.0, 20.0)
         painter.save()
 
         # Header Title
-        painter.setPen(QColor("#EEF2F8"))
-        painter.setFont(QFont("Segoe UI", 9, QFont.Weight.DemiBold))
+        painter.setPen(QColor("#FFFFFF"))
+        painter.setFont(_font("Segoe UI", 9.2, QFont.Weight.DemiBold))
         painter.drawText(
-            QRectF(expanded_x + 18.0, 6.0, expanded_w - 78.0, 26.0),
+            QRectF(expanded_x + 18.0, 6.0, expanded_w - 78.0, 24.0),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
             "Edit Profil Pengguna",
         )
 
         # Close button (X)
         close_hovered = self.hovered_btn == "profile_cancel"
-        close_bg = _interpolate_color(QColor(255, 255, 255, 18), QColor(255, 255, 255, 42), 1.0 if close_hovered else 0.0)
-        close_border = _interpolate_color(QColor(255, 255, 255, 26), QColor(255, 255, 255, 65), 1.0 if close_hovered else 0.0)
-        painter.setPen(QPen(close_border, 1.0))
+        close_bg = _interpolate_color(QColor(255, 255, 255, 12), QColor(255, 255, 255, 34), 1.0 if close_hovered else 0.0)
+        close_border = _interpolate_color(QColor(255, 255, 255, 18), QColor(255, 255, 255, 55), 1.0 if close_hovered else 0.0)
+        painter.setPen(QPen(close_border, 0.8))
         painter.setBrush(QBrush(close_bg))
         painter.drawEllipse(self.profile_close_rect)
         close_center = self.profile_close_rect.center()
-        painter.setPen(QPen(QColor(255, 255, 255, 230), 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.setPen(QPen(QColor("#94A3B8"), 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         painter.drawLine(
-            QPointF(close_center.x() - 3.2, close_center.y() - 3.2),
-            QPointF(close_center.x() + 3.2, close_center.y() + 3.2),
+            QPointF(close_center.x() - 3.0, close_center.y() - 3.0),
+            QPointF(close_center.x() + 3.0, close_center.y() + 3.0),
         )
         painter.drawLine(
-            QPointF(close_center.x() + 3.2, close_center.y() - 3.2),
-            QPointF(close_center.x() - 3.2, close_center.y() + 3.2),
+            QPointF(close_center.x() + 3.0, close_center.y() - 3.0),
+            QPointF(close_center.x() - 3.0, close_center.y() + 3.0),
         )
 
         label_width = 54.0
@@ -1515,7 +1517,7 @@ class DesktopDynamicIsland(QWidget):
         painter.setFont(_font("Segoe UI", 7.5, QFont.Weight.Bold))
         # Row 1: NAMA
         row1_y = 38.0
-        painter.setPen(QColor("#9AA7B8"))
+        painter.setPen(QColor("#64748B"))
         painter.drawText(
             QRectF(expanded_x + 18.0, row1_y, label_width - 4.0, 24.0),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -1527,7 +1529,7 @@ class DesktopDynamicIsland(QWidget):
 
         # Row 2: STATUS
         row2_y = 69.0
-        painter.setPen(QColor("#9AA7B8"))
+        painter.setPen(QColor("#64748B"))
         painter.drawText(
             QRectF(expanded_x + 18.0, row2_y, label_width - 4.0, 24.0),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -1542,42 +1544,30 @@ class DesktopDynamicIsland(QWidget):
         btn_h = 24.0
 
         # Reset button (Left)
-        self.profile_reset_rect = QRectF(expanded_x + 18.0, btn_y, 62.0, btn_h)
+        self.profile_reset_rect = QRectF(expanded_x + 18.0, btn_y, 60.0, btn_h)
         reset_hovered = self.hovered_btn == "profile_reset"
-        reset_bg = _interpolate_color(QColor(255, 255, 255, 16), QColor(255, 255, 255, 34), 1.0 if reset_hovered else 0.0)
-        reset_border = _interpolate_color(QColor(255, 255, 255, 24), QColor(255, 255, 255, 55), 1.0 if reset_hovered else 0.0)
-        painter.setPen(QPen(reset_border, 1.0))
+        reset_bg = _interpolate_color(QColor(255, 255, 255, 10), QColor(255, 255, 255, 26), 1.0 if reset_hovered else 0.0)
+        reset_border = _interpolate_color(QColor(255, 255, 255, 18), QColor(255, 255, 255, 45), 1.0 if reset_hovered else 0.0)
+        painter.setPen(QPen(reset_border, 0.8))
         painter.setBrush(QBrush(reset_bg))
         painter.drawRoundedRect(self.profile_reset_rect, 12.0, 12.0)
-        painter.setFont(_font("Segoe UI", 8.0, QFont.Weight.DemiBold))
-        painter.setPen(QColor("#E2E8F0"))
+        painter.setFont(_font("Segoe UI", 8.0, QFont.Weight.Medium))
+        painter.setPen(QColor("#94A3B8"))
         painter.drawText(self.profile_reset_rect, Qt.AlignmentFlag.AlignCenter, "Reset")
 
         # Save button (Right)
-        save_w = 70.0
-        self.profile_save_rect = QRectF(expanded_x + expanded_w - 18.0 - save_w, btn_y, save_w, btn_h + 2.0)
+        save_w = 68.0
+        self.profile_save_rect = QRectF(expanded_x + expanded_w - 18.0 - save_w, btn_y, save_w, btn_h)
         save_hovered = self.hovered_btn == "profile_save"
-        save_bg = _interpolate_color(QColor("#00F5FF"), QColor("#38BDF8"), 1.0 if save_hovered else 0.0)
+        save_bg = _interpolate_color(QColor("#F8FAFC"), QColor("#E2E8F0"), 1.0 if save_hovered else 0.0)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(save_bg))
-        painter.drawRoundedRect(self.profile_save_rect, 13.0, 13.0)
-        painter.setPen(QColor("#090D16"))
-        painter.setFont(_font("Segoe UI", 8.0, QFont.Weight.Bold))
+        painter.drawRoundedRect(self.profile_save_rect, 12.0, 12.0)
+        painter.setPen(QColor("#0F172A"))
+        painter.setFont(_font("Segoe UI", 8.2, QFont.Weight.Bold))
         painter.drawText(self.profile_save_rect, Qt.AlignmentFlag.AlignCenter, "Simpan")
 
-        # Cancel button (Next to Save)
-        cancel_w = 60.0
-        self.profile_cancel_rect = QRectF(self.profile_save_rect.left() - 8.0 - cancel_w, btn_y, cancel_w, btn_h)
-        cancel_hovered = self.hovered_btn == "profile_cancel"
-        cancel_bg = _interpolate_color(QColor(255, 255, 255, 16), QColor(255, 255, 255, 34), 1.0 if cancel_hovered else 0.0)
-        cancel_border = _interpolate_color(QColor(255, 255, 255, 24), QColor(255, 255, 255, 55), 1.0 if cancel_hovered else 0.0)
-        painter.setPen(QPen(cancel_border, 1.0))
-        painter.setBrush(QBrush(cancel_bg))
-        painter.drawRoundedRect(self.profile_cancel_rect, 12.0, 12.0)
-        painter.setFont(_font("Segoe UI", 8.0, QFont.Weight.DemiBold))
-        painter.setPen(QColor("#E2E8F0"))
-        painter.drawText(self.profile_cancel_rect, Qt.AlignmentFlag.AlignCenter, "Batal")
-
+        self.profile_cancel_rect = QRectF()
         painter.restore()
 
     def open_youtube_guide(self):
@@ -1915,7 +1905,7 @@ class DesktopDynamicIsland(QWidget):
         painter.save()
 
         # Clip strictly to the panel bounds with safe top/bottom margin
-        clip_top = 8.0
+        clip_top = 32.0
         clip_bottom = 8.0
         clip_rect = QRectF(
             panel_x,
@@ -1952,7 +1942,7 @@ class DesktopDynamicIsland(QWidget):
         cue_metrics = {}
         for idx in range(min_idx, max_idx):
             cue = self.lyrics_cues[idx]
-            raw_text = cue[1].strip()
+            raw_text = cue[1].strip() if (isinstance(cue, (list, tuple)) and len(cue) > 1) else str(cue).strip()
             is_instrumental = not raw_text or raw_text in ("♪", "♫", "♩", "♪   ♪   ♪", "(instrumental)", "[instrumental]")
             text = "♪" if is_instrumental else raw_text
             diff = idx - current_float
@@ -2525,7 +2515,8 @@ class DesktopDynamicIsland(QWidget):
                 self.lyrics_timestamps, self.display_position_seconds(now)
             ) - 1
             target_cue = max(0, min(len(self.lyrics_cues) - 1, target_cue))
-            active_text = self.lyrics_cues[target_cue][1].strip()
+            c_item = self.lyrics_cues[target_cue]
+            active_text = c_item[1].strip() if (isinstance(c_item, (list, tuple)) and len(c_item) > 1) else str(c_item).strip()
 
             is_instrumental = not active_text or active_text in ("♪", "♫", "♩", "♪   ♪   ♪", "(instrumental)", "[instrumental]")
             if is_instrumental:
@@ -2660,31 +2651,17 @@ class DesktopDynamicIsland(QWidget):
 
     def _paint_top_status_bar(self, painter: QPainter, media_x: float, media_w: float, margin: float, draw_clock: bool = False):
         top_y = 8.0
-        pill_h = 18.0
-        pill_r = 5.0
-        cy_stat = top_y + pill_h / 2.0  # 17.0px
+        pill_h = 19.0
+        pill_r = 9.5
+        cy_stat = top_y + pill_h / 2.0  # 17.5px
 
-        # 1. Center Clock Capsule (Mathematically & Optically locked to the EXACT geometric center of the Dynamic Island)
-        island_center_x = media_x + media_w / 2.0
-        clock_text = self.local_clock_text or self._format_local_clock()
-        font_clock = _font("Segoe UI", 8.2, QFont.Weight.DemiBold)
-        painter.setFont(font_clock)
-        clock_tw = painter.fontMetrics().horizontalAdvance(clock_text)
-        clock_pill_w = clock_tw + 14.0
-        clock_pill_rect = QRectF(island_center_x - clock_pill_w / 2.0, top_y, clock_pill_w, pill_h)
+        # 1. Left System Health Pill [ Battery · CPU · RAM ] (Vector Icons only, NO TEXT)
+        stats_rect = QRectF(media_x + margin, top_y, 148.0, pill_h)
+        painter.setBrush(QBrush(QColor(255, 255, 255, 11)))
+        painter.setPen(QPen(QColor(255, 255, 255, 16), 0.8))
+        painter.drawRoundedRect(stats_rect, pill_r, pill_r)
 
-        if draw_clock:
-            painter.setPen(QPen(QColor(255, 255, 255, 22), 1.0))
-            painter.setBrush(QBrush(QColor(255, 255, 255, 12)))
-            painter.drawRoundedRect(clock_pill_rect, pill_r, pill_r)
-            painter.setPen(QColor("#F1F5F9"))
-            painter.drawText(clock_pill_rect, Qt.AlignmentFlag.AlignCenter, clock_text)
-
-        # 2. Left stats: Battery/AC, CPU (icon + %), RAM (icon + %)
-        font_stat = _font("Segoe UI", 6.8, QFont.Weight.Bold)
-        painter.setFont(font_stat)
-        fm_stat = painter.fontMetrics()
-
+        cur_stat_x = stats_rect.left() + 7.0
         is_ac = self.system_battery_percent > 100
         is_charging = self.system_battery_charging
         pwr_text = "AC" if is_ac else f"{self.system_battery_percent}%"
@@ -2693,189 +2670,302 @@ class DesktopDynamicIsland(QWidget):
         ram_val = int(round(self.system_ram_percent))
         ram_text = f"{ram_val}%"
 
-        pwr_tw = fm_stat.horizontalAdvance(pwr_text)
-        cpu_tw = fm_stat.horizontalAdvance(cpu_text)
-        ram_tw = fm_stat.horizontalAdvance(ram_text)
-
-        # The wings unfurl smoothly once the island has widened sufficiently (> 0.65 progress)
-        wing_op = max(0.0, min(1.0, (self.expand_progress - 0.65) / 0.30))
-        if wing_op <= 0.01:
-            return
-
-        painter.save()
-        painter.setOpacity(painter.opacity() * wing_op)
-        slide_offset = (1.0 - wing_op) * 10.0
-
-        pwr_w = 10.0 + 3.0 + pwr_tw
-        cpu_w = 10.0 + 3.0 + cpu_tw
-        ram_w = 11.0 + 3.0 + ram_tw
-        stat_sep_w = 8.0  # Sleek 8px divider spacing (2.5px gap + 3.0px dot + 2.5px gap)
-        left_pad = 5.0
-        left_content_w = pwr_w + stat_sep_w + cpu_w + stat_sep_w + ram_w
-        desired_left_pill_w = left_content_w + (left_pad * 2.0)
-        # Guarantee minimum 8px safety clearance to the centered clock capsule under all screen resolutions and font DPIs
-        max_left_pill_w = max(40.0, clock_pill_rect.left() - (media_x + margin) - 8.0)
-        left_pill_w = min(desired_left_pill_w, max_left_pill_w)
-        left_pill_rect = QRectF(media_x + margin - slide_offset, top_y, left_pill_w, pill_h)
-
-        # Draw Left Capsule (System Health)
-        painter.setPen(QPen(QColor(255, 255, 255, 22), 1.0))
-        painter.setBrush(QBrush(QColor(255, 255, 255, 12)))
-        painter.drawRoundedRect(left_pill_rect, pill_r, pill_r)
-
-        painter.save()
-        painter.setClipRect(left_pill_rect)
-        kx = left_pill_rect.left() + left_pad
-        # Power
-        self._draw_vector_power(painter, kx + 5.0, cy_stat, is_charging, is_ac, self.system_battery_percent)
-        kx += 10.0 + 3.0
-        painter.setPen(QColor("#38BDF8") if is_ac or is_charging else (
+        # Battery / AC
+        self._draw_vector_power(painter, cur_stat_x + 5.0, cy_stat, is_charging, is_ac, self.system_battery_percent)
+        cur_stat_x += 13.0
+        painter.setFont(_font("Segoe UI", 7.6, QFont.Weight.DemiBold))
+        painter.setPen(QColor("#38BDF8") if (is_ac or is_charging) else (
             QColor("#34D399") if self.system_battery_percent > 40 else (
                 QColor("#FBBF24") if self.system_battery_percent > 20 else QColor("#F87171")
             )
         ))
-        painter.drawText(QRectF(kx, top_y, pwr_tw, pill_h), Qt.AlignmentFlag.AlignVCenter, pwr_text)
-        kx += pwr_tw + 2.5
-        painter.setPen(QColor("#475569"))
-        painter.drawText(QRectF(kx, top_y, 3.0, pill_h), Qt.AlignmentFlag.AlignCenter, "·")
-        kx += 3.0 + 2.5
+        painter.drawText(QRectF(cur_stat_x, top_y, 32.0, pill_h), Qt.AlignmentFlag.AlignVCenter, pwr_text)
+        cur_stat_x += 28.0
+
+        # Dot
+        painter.setPen(QColor(255, 255, 255, 40))
+        painter.drawText(QRectF(cur_stat_x, top_y, 6.0, pill_h), Qt.AlignmentFlag.AlignCenter, "·")
+        cur_stat_x += 6.0
 
         # CPU
-        self._draw_vector_cpu(painter, kx + 5.0, cy_stat, QColor("#818CF8"))
-        kx += 10.0 + 3.0
-        painter.setPen(QColor("#F87171") if cpu_val > 80 else QColor("#E2E8F0"))
-        painter.drawText(QRectF(kx, top_y, cpu_tw, pill_h), Qt.AlignmentFlag.AlignVCenter, cpu_text)
-        kx += cpu_tw + 2.5
-        painter.setPen(QColor("#475569"))
-        painter.drawText(QRectF(kx, top_y, 3.0, pill_h), Qt.AlignmentFlag.AlignCenter, "·")
-        kx += 3.0 + 2.5
+        self._draw_vector_cpu(painter, cur_stat_x + 5.0, cy_stat, QColor("#818CF8"))
+        cur_stat_x += 13.0
+        painter.setFont(_font("Segoe UI", 7.6, QFont.Weight.DemiBold))
+        painter.setPen(QColor("#F87171") if cpu_val > 80 else QColor("#CBD5E1"))
+        painter.drawText(QRectF(cur_stat_x, top_y, 26.0, pill_h), Qt.AlignmentFlag.AlignVCenter, cpu_text)
+        cur_stat_x += 24.0
+
+        # Dot
+        painter.setPen(QColor(255, 255, 255, 40))
+        painter.drawText(QRectF(cur_stat_x, top_y, 6.0, pill_h), Qt.AlignmentFlag.AlignCenter, "·")
+        cur_stat_x += 6.0
 
         # RAM
-        self._draw_vector_ram(painter, kx + 5.5, cy_stat, QColor("#34D399"))
-        kx += 11.0 + 3.0
-        painter.setPen(QColor("#F87171") if ram_val > 85 else QColor("#E2E8F0"))
-        painter.drawText(QRectF(kx, top_y, ram_tw, pill_h), Qt.AlignmentFlag.AlignVCenter, ram_text)
-        painter.restore()
+        self._draw_vector_ram(painter, cur_stat_x + 6.0, cy_stat, QColor("#34D399"))
+        cur_stat_x += 14.0
+        painter.setFont(_font("Segoe UI", 7.6, QFont.Weight.DemiBold))
+        painter.setPen(QColor("#F87171") if ram_val > 85 else QColor("#CBD5E1"))
+        painter.drawText(QRectF(cur_stat_x, top_y, 26.0, pill_h), Qt.AlignmentFlag.AlignVCenter, ram_text)
 
-        # 3. Right Wing: Settings Action, Conditional Profile Edit Action, and Live Network Traffic Speed
-        # [ Speed Upload+Icon · Icon+Speed Download ]  (  )?  (  )
-        btn_size = 20.0
+        # 2. Center Living Clock (Locked to canvas_w / 2.0)
+        if draw_clock:
+            clock_cx = self.canvas_w / 2.0
+            clock_rect = QRectF(clock_cx - 32.0, top_y, 64.0, pill_h)
+            painter.setBrush(QBrush(QColor(255, 255, 255, 15)))
+            painter.setPen(QPen(QColor(255, 255, 255, 24), 0.8))
+            painter.drawRoundedRect(clock_rect, pill_r, pill_r)
+            painter.setFont(_font("Segoe UI", 8.4, QFont.Weight.DemiBold))
+            painter.setPen(QColor("#FFFFFF"))
+            clock_text = self.local_clock_text or self._format_local_clock()
+            painter.drawText(clock_rect, Qt.AlignmentFlag.AlignCenter, clock_text)
+
+        # 3. Right Wing: Settings Gear + Conditional Pencil + Speed Up/Down
+        right_anchor_x = media_x + media_w - margin
+        btn_size = 19.0
         btn_gap = 6.0
-        media_right = media_x + media_w - margin + slide_offset
 
-        # 1. Standalone circular settings gear button (Always on the far right)
-        self.btn_settings_rect = QRectF(media_right - btn_size, top_y, btn_size, btn_size)
+        # Settings Gear
+        self.btn_settings_rect = QRectF(right_anchor_x - btn_size, top_y, btn_size, btn_size)
         settings_t = self.btn_hover_anim.get("settings", 0.0)
-
-        # 2. Standalone circular pencil edit button (ONLY visible when media is NOT detected)
-        show_pencil = not self.has_media
-        pencil_alpha = self.pencil_presence
-        if show_pencil and pencil_alpha > 0.05:
-            # Sits directly to the left of the gear button
-            self.btn_profile_rect = QRectF(self.btn_settings_rect.left() - btn_gap - btn_size, top_y, btn_size, btn_size)
-            profile_t = self.btn_hover_anim.get("profile_edit", 0.0)
-
-            pencil_bg_col = _interpolate_color(
-                QColor(255, 255, 255, int(14 * pencil_alpha)),
-                QColor(255, 255, 255, int(36 * pencil_alpha)),
-                profile_t,
-            )
-            pencil_border_col = _interpolate_color(
-                QColor(255, 255, 255, int(22 * pencil_alpha)),
-                QColor(255, 255, 255, int(60 * pencil_alpha)),
-                profile_t,
-            )
-            painter.setPen(QPen(pencil_border_col, 1.0))
-            painter.setBrush(QBrush(pencil_bg_col))
-            painter.drawEllipse(self.btn_profile_rect)
-
-            pencil_col = _interpolate_color(QColor("#CBD5E1"), QColor("#00F5FF"), profile_t)
-            pencil_col.setAlpha(int(pencil_col.alpha() * pencil_alpha))
-            self._draw_vector_pencil(
-                painter,
-                self.btn_profile_rect.center().x(),
-                self.btn_profile_rect.center().y(),
-                pencil_col,
-            )
-        else:
-            self.btn_profile_rect = QRectF()
-
-        # 3. Live Network Traffic Speed Pill
-        # Positioned to the left of Gear (when media active) or shifts left of Pencil (when media inactive)
-        speed_anchor_x = self.btn_settings_rect.left() - (self.pencil_presence * (btn_size + btn_gap))
-
-        up_text = self._format_network_speed(self.net_upload_speed)
-        down_text = self._format_network_speed(self.net_download_speed)
-
-        painter.setFont(font_stat)
-        fm_speed = painter.fontMetrics()
-        up_tw = fm_speed.horizontalAdvance(up_text)
-        down_tw = fm_speed.horizontalAdvance(down_text)
-        arr_up_w = fm_speed.horizontalAdvance("↑")
-        arr_down_w = fm_speed.horizontalAdvance("↓")
-        dot_w = fm_speed.horizontalAdvance("·")
-
-        pad_h = 5.0
-        gap_elem = 2.0
-        gap_dot = 3.5
-        speed_pill_w = (
-            pad_h +
-            up_tw + gap_elem + arr_up_w +
-            gap_dot + dot_w + gap_dot +
-            arr_down_w + gap_elem + down_tw +
-            pad_h
-        )
-        speed_pill_x = speed_anchor_x - btn_gap - speed_pill_w
-        speed_pill_rect = QRectF(speed_pill_x, top_y, speed_pill_w, pill_h)
-
-        # Draw Speed Pill Capsule
-        painter.setPen(QPen(QColor(255, 255, 255, 22), 1.0))
-        painter.setBrush(QBrush(QColor(255, 255, 255, 12)))
-        painter.drawRoundedRect(speed_pill_rect, pill_r, pill_r)
-
-        # Draw Elements strictly matching user order:
-        # "urutan dari kiri speed upload+icon, icon+speed download"
-        kx = speed_pill_rect.left() + pad_h
-        # 1. speed upload text
-        painter.setPen(QColor("#E2E8F0"))
-        painter.drawText(QRectF(kx, top_y, up_tw, pill_h), Qt.AlignmentFlag.AlignVCenter, up_text)
-        kx += up_tw + gap_elem
-
-        # 2. upload icon (↑)
-        painter.setPen(QColor("#FF007F"))  # Neon Magenta
-        painter.drawText(QRectF(kx, top_y, arr_up_w, pill_h), Qt.AlignmentFlag.AlignVCenter, "↑")
-        kx += arr_up_w + gap_dot
-
-        # 3. separator dot
-        painter.setPen(QColor("#475569"))
-        painter.drawText(QRectF(kx, top_y, dot_w, pill_h), Qt.AlignmentFlag.AlignCenter, "·")
-        kx += dot_w + gap_dot
-
-        # 4. download icon (↓)
-        painter.setPen(QColor("#00F5FF"))  # Electric Cyan
-        painter.drawText(QRectF(kx, top_y, arr_down_w, pill_h), Qt.AlignmentFlag.AlignVCenter, "↓")
-        kx += arr_down_w + gap_elem
-
-        # 5. speed download text
-        painter.setPen(QColor("#E2E8F0"))
-        painter.drawText(QRectF(kx, top_y, down_tw, pill_h), Qt.AlignmentFlag.AlignVCenter, down_text)
-
-        # 4. Draw dedicated circular settings gear button
-        gear_bg_col = _interpolate_color(QColor(255, 255, 255, 14), QColor(255, 255, 255, 36), settings_t)
-        gear_border_col = _interpolate_color(QColor(255, 255, 255, 22), QColor(255, 255, 255, 60), settings_t)
-        painter.setPen(QPen(gear_border_col, 1.0))
-        painter.setBrush(QBrush(gear_bg_col))
-        painter.drawEllipse(self.btn_settings_rect)
-
-        gear_col = _interpolate_color(QColor("#CBD5E1"), QColor("#FFFFFF"), settings_t)
+        gear_bg = _interpolate_color(QColor(255, 255, 255, 10), QColor(255, 255, 255, 30), settings_t)
+        gear_border = _interpolate_color(QColor(255, 255, 255, 16), QColor(255, 255, 255, 50), settings_t)
+        painter.setBrush(QBrush(gear_bg))
+        painter.setPen(QPen(gear_border, 0.8))
+        painter.drawRoundedRect(self.btn_settings_rect, 6.0, 6.0)
         self._draw_settings_gear_icon(
             painter,
             self.btn_settings_rect.center().x(),
             self.btn_settings_rect.center().y(),
-            gear_col,
-            angle_deg=settings_t * 35.0,
+            _interpolate_color(QColor("#94A3B8"), QColor("#FFFFFF"), settings_t),
         )
-        painter.restore()
+
+        # Conditional Pencil Edit (ONLY when media is NOT active)
+        show_pencil = not self.has_media
+        if show_pencil:
+            self.btn_profile_rect = QRectF(self.btn_settings_rect.left() - btn_gap - btn_size, top_y, btn_size, btn_size)
+            profile_t = self.btn_hover_anim.get("profile_edit", 0.0)
+            pencil_bg = _interpolate_color(QColor(255, 255, 255, 10), QColor(255, 255, 255, 30), profile_t)
+            pencil_border = _interpolate_color(QColor(255, 255, 255, 16), QColor(255, 255, 255, 50), profile_t)
+            painter.setBrush(QBrush(pencil_bg))
+            painter.setPen(QPen(pencil_border, 0.8))
+            painter.drawRoundedRect(self.btn_profile_rect, 6.0, 6.0)
+            self._draw_vector_pencil(
+                painter,
+                self.btn_profile_rect.center().x(),
+                self.btn_profile_rect.center().y(),
+                _interpolate_color(QColor("#38BDF8"), QColor("#00F5FF"), profile_t),
+            )
+            speed_anchor = self.btn_profile_rect.left()
+        else:
+            self.btn_profile_rect = QRectF()
+            speed_anchor = self.btn_settings_rect.left()
+
+        # Network Speed Pill: [ ↓ 1.2 MB/s · ↑ 240 KB/s ]
+        up_text = self._format_network_speed(self.net_upload_speed)
+        down_text = self._format_network_speed(self.net_download_speed)
+        speed_w = 114.0
+        speed_rect = QRectF(speed_anchor - btn_gap - speed_w, top_y, speed_w, pill_h)
+        painter.setBrush(QBrush(QColor(255, 255, 255, 11)))
+        painter.setPen(QPen(QColor(255, 255, 255, 16), 0.8))
+        painter.drawRoundedRect(speed_rect, pill_r, pill_r)
+
+        painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.Medium))
+        # Download (↓)
+        painter.setPen(QColor("#38BDF8"))
+        painter.drawText(QRectF(speed_rect.left() + 4.0, top_y, 48.0, pill_h), Qt.AlignmentFlag.AlignCenter, f"↓ {down_text}")
+        # Dot
+        painter.setPen(QColor(255, 255, 255, 40))
+        painter.drawText(QRectF(speed_rect.left() + 53.0, top_y, 6.0, pill_h), Qt.AlignmentFlag.AlignCenter, "·")
+        # Upload (↑)
+        painter.setPen(QColor("#A78BFA"))
+        painter.drawText(QRectF(speed_rect.left() + 60.0, top_y, 48.0, pill_h), Qt.AlignmentFlag.AlignCenter, f"↑ {up_text}")
+
+    def _calculate_base_media_width(self) -> float:
+        """Calculate the snug, content-hugging base width for the media player."""
+        fixed_overhead = 206.0  # margin(16) + art(46) + gap(10) + vis_gap(12) + trans/vis(106) + margin(16)
+        if self.has_media:
+
+            title_font = _font("Segoe UI", 11.0, QFont.Weight.Bold)
+            sub_font = _font("Segoe UI", 8.8, QFont.Weight.Medium)
+            title_w = QFontMetricsF(title_font).horizontalAdvance(self.track_title or "")
+
+            has_distinct_album = (
+                bool(self.track_album)
+                and self.track_album.strip()
+                and self.track_album.strip().lower() not in (
+                    (self.track_title or "").strip().lower(),
+                    (self.track_artist or "").strip().lower(),
+                    "unknown album",
+                    "single",
+                )
+            )
+            if self.track_artist and has_distinct_album:
+                subtitle = f"{self.track_artist} · {self.track_album}"
+            elif self.track_artist:
+                subtitle = self.track_artist
+            elif has_distinct_album:
+                subtitle = self.track_album
+            else:
+                subtitle = ""
+            sub_w = QFontMetricsF(sub_font).horizontalAdvance(subtitle) if subtitle else 0.0
+            content_text_w = max(title_w, sub_w)
+            desired_w = fixed_overhead + content_text_w
+        else:
+            desired_w = 420.0
+
+        screen_w = QApplication.primaryScreen().availableGeometry().width()
+        max_w = min(460.0, float(screen_w - 24))
+        return max(420.0, min(max_w, desired_w))
+
+    def _calculate_dynamic_lyrics_width(self, now: float) -> float:
+        """
+        Dynamically compute an aesthetic, well-proportioned island width for lyrics.
+        Enforces safe bounds (max 680px, strictly inside canvas bounds with >= 36px margin)
+        to guarantee that the concave Bezier ears and rounded bottom corners are never clipped into a box.
+        """
+        base_w = self.expanded_w
+        safe_canvas_max = float(self.canvas_w - 72.0)
+        max_total_w = min(680.0, safe_canvas_max)
+        max_panel_w = max(200.0, max_total_w - base_w - 16.0)
+
+        if self.lyrics_cues:
+            target_cue = bisect.bisect_right(
+                self.lyrics_timestamps, self.display_position_seconds(now)
+            ) - 1
+            target_cue = max(0, min(len(self.lyrics_cues) - 1, target_cue))
+            c_item = self.lyrics_cues[target_cue]
+            active_text = c_item[1].strip() if (isinstance(c_item, (list, tuple)) and len(c_item) > 1) else str(c_item).strip()
+
+            is_instrumental = not active_text or active_text in ("♪", "♫", "♩", "♪   ♪   ♪", "(instrumental)", "[instrumental]")
+            if is_instrumental:
+                active_w = 40.0
+            else:
+                lyric_font = _font("Segoe UI", 11.0, QFont.Weight.Bold)
+                active_w = QFontMetricsF(lyric_font).horizontalAdvance(active_text)
+        else:
+            active_w = 120.0
+
+        min_panel_w = min(220.0, max_panel_w)
+        panel_desired_w = max(min_panel_w, min(max_panel_w, active_w + 36.0))
+        return min(max_total_w, base_w + 16.0 + panel_desired_w)
+
+    def _update_system_stats(self, now: float):
+        if now - self._last_stats_time < 1.8:
+            return
+        # Never perform CPU/RAM measurements while the island is actively animating
+        if abs(self.vel_w) > 1.0 or abs(self.vel_h) > 1.0 or self.expand_progress < 0.95:
+            return
+        self._last_stats_time = now
+
+        try:
+            # 1. Battery (instant kernel call ~0.005ms)
+            pstat = SYSTEM_POWER_STATUS()
+            if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(pstat)):
+                self.system_battery_percent = int(pstat.BatteryLifePercent)
+                self.system_battery_charging = bool(pstat.BatteryFlag & 8) or bool(pstat.ACLineStatus == 1)
+
+            # 2. RAM (instant kernel call ~0.003ms)
+            mstat = MEMORYSTATUSEX()
+            mstat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(mstat)):
+                self.system_ram_percent = float(mstat.dwMemoryLoad)
+
+            # 3. CPU (instant kernel call ~0.002ms)
+            idle_ft = FILETIME()
+            kernel_ft = FILETIME()
+            user_ft = FILETIME()
+            if ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle_ft), ctypes.byref(kernel_ft), ctypes.byref(user_ft)):
+                i = (idle_ft.dwHighDateTime << 32) | idle_ft.dwLowDateTime
+                k = (kernel_ft.dwHighDateTime << 32) | kernel_ft.dwLowDateTime
+                u = (user_ft.dwHighDateTime << 32) | user_ft.dwLowDateTime
+                if self._prev_kernel_time > 0:
+                    d_idle = i - self._prev_idle_time
+                    d_total = (k - self._prev_kernel_time) + (u - self._prev_user_time)
+                    if d_total > 0:
+                        self.system_cpu_percent = max(0.0, min(100.0, (1.0 - (d_idle / d_total)) * 100.0))
+                self._prev_idle_time, self._prev_kernel_time, self._prev_user_time = i, k, u
+        except Exception:
+            pass
+
+    @staticmethod
+    def _query_network_io():
+        """Returns (bytes_sent, bytes_recv) using psutil with seamless fallback to Windows native GetIfTable."""
+        if psutil is not None:
+            try:
+                net = psutil.net_io_counters()
+                return net.bytes_sent, net.bytes_recv
+            except Exception:
+                pass
+        if sys.platform == "win32":
+            try:
+                buf_size = wintypes.DWORD(0)
+                ctypes.windll.iphlpapi.GetIfTable(None, ctypes.byref(buf_size), False)
+                if buf_size.value > 0:
+                    buf = ctypes.create_string_buffer(buf_size.value)
+                    if ctypes.windll.iphlpapi.GetIfTable(buf, ctypes.byref(buf_size), False) == 0:
+                        num = wintypes.DWORD.from_buffer_copy(buf[:4]).value
+                        row_size = ctypes.sizeof(MIB_IFROW)
+                        tot_in = 0
+                        tot_out = 0
+                        for i in range(num):
+                            row = MIB_IFROW.from_buffer_copy(buf[4 + i * row_size : 4 + (i + 1) * row_size])
+                            if row.dwType != 24:  # Exclude loopback
+                                tot_in += row.dwInOctets
+                                tot_out += row.dwOutOctets
+                        return tot_out, tot_in
+            except Exception:
+                pass
+        return 0, 0
+
+    def _start_network_speed_thread(self):
+        """Continuously measures real-time network upload and download throughput in a background thread."""
+        def _worker():
+            last_sent, last_recv = self._query_network_io()
+            last_time = time.perf_counter()
+
+            while not getattr(self, "_stop_background_threads", False):
+                try:
+                    time.sleep(0.5)
+                    now = time.perf_counter()
+                    dt = max(0.1, now - last_time)
+                    last_time = now
+
+                    curr_sent, curr_recv = self._query_network_io()
+                    if curr_sent >= last_sent and curr_recv >= last_recv:
+                        up_diff = curr_sent - last_sent
+                        down_diff = curr_recv - last_recv
+                    else:
+                        up_diff = max(0, curr_sent)
+                        down_diff = max(0, curr_recv)
+                    last_sent = curr_sent
+                    last_recv = curr_recv
+
+                    instant_up = up_diff / dt
+                    instant_down = down_diff / dt
+
+                    # Smooth responsive filter (70% current, 30% previous)
+                    self.net_upload_speed = (self.net_upload_speed * 0.3) + (instant_up * 0.7)
+                    self.net_download_speed = (self.net_download_speed * 0.3) + (instant_down * 0.7)
+                except Exception:
+                    time.sleep(0.5)
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+
+    @staticmethod
+    def _format_network_speed(bytes_per_sec: float) -> str:
+        if bytes_per_sec >= 1024 * 1024 * 100:
+            return f"{int(round(bytes_per_sec / (1024 * 1024)))} MB/s"
+        elif bytes_per_sec >= 1024 * 1024:
+            return f"{bytes_per_sec / (1024 * 1024):.1f} MB/s"
+        elif bytes_per_sec >= 100 * 1024:
+            return f"{int(round(bytes_per_sec / 1024))} KB/s"
+        elif bytes_per_sec >= 1024:
+            return f"{bytes_per_sec / 1024:.1f} KB/s"
+        elif bytes_per_sec >= 60:
+            return f"{bytes_per_sec / 1024:.1f} KB/s"
+        else:
+            return "0 KB/s"
 
     def _update_audio_reactive_spectrum(self, dt: float, now: float):
         num_cols = 17
@@ -4257,6 +4347,11 @@ class DesktopDynamicIsland(QWidget):
                 self.update()
                 event.accept()
                 return
+            if getattr(self, "seek_rect", QRectF()).contains(event.position()):
+                self.is_seeking = True
+                self._seek_from_pos(event.position().x())
+                event.accept()
+                return
             if button == "lyrics":
                 if self.is_spotify_active:
                     self.lyrics_open = not self.lyrics_open
@@ -4319,6 +4414,11 @@ class DesktopDynamicIsland(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if getattr(self, "is_seeking", False):
+            self._seek_from_pos(event.position().x())
+            self.update()
+            event.accept()
+            return
         if getattr(self, "is_dragging_volume", False):
             self._update_volume_from_pos(event.position().x())
             self.update()
@@ -4327,13 +4427,17 @@ class DesktopDynamicIsland(QWidget):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if getattr(self, "is_seeking", False):
+            self.is_seeking = False
+            self.update()
+            event.accept()
+            return
         if getattr(self, "is_dragging_volume", False):
             self.is_dragging_volume = False
             self.update()
             event.accept()
             return
         super().mouseReleaseEvent(event)
-
     def wheelEvent(self, event):
         pos = event.position()
         if getattr(self, "vol_group_rect", QRectF()).contains(pos):
@@ -4348,6 +4452,14 @@ class DesktopDynamicIsland(QWidget):
             event.accept()
             return
         super().wheelEvent(event)
+
+    def _seek_from_pos(self, px: float):
+        if getattr(self, "seek_rect", None) and self.seek_rect.width() > 0 and self.duration_seconds > 0:
+            rel = (px - self.seek_rect.left()) / self.seek_rect.width()
+            target_sec = max(0.0, min(self.duration_seconds, rel * self.duration_seconds))
+            self.position_seconds = target_sec
+            self.position_updated_at = time.perf_counter()
+            self.media_controller.command(f"seek:{target_sec}")
 
     def _update_volume_from_pos(self, px: float):
         if getattr(self, "vol_track_rect", None) and self.vol_track_rect.width() > 0:
@@ -4642,282 +4754,263 @@ class DesktopDynamicIsland(QWidget):
                 painter.translate(cx, cy)
                 painter.scale(tab_scale, tab_scale)
                 painter.translate(-cx, -cy)
-            art_size = min(46.0, media_w * 0.22)
-            art_rect = QRectF(
-                media_x + margin,
-                header_center_y - (art_size / 2.0),
-                art_size,
-                art_size,
-            )
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(QColor(0, 0, 0, 100)))
-            painter.drawRoundedRect(art_rect.translated(0.0, 2.0), 12.0, 12.0)
-            if self.has_media:
-                art_gradient = QLinearGradient(art_rect.topLeft(), art_rect.bottomRight())
-                art_gradient.setColorAt(0.0, QColor("#A6B4FF"))
-                art_gradient.setColorAt(1.0, QColor("#667BE0"))
-                painter.setBrush(QBrush(art_gradient))
-                painter.drawRoundedRect(art_rect, 12.0, 12.0)
+
+            media_left = x + margin
+            is_lyrics_expanded = self.lyrics_open and self.is_spotify_active and (w > self.expanded_w)
+            media_w_area = 360.0 if is_lyrics_expanded else (w - margin * 2.0)
+
+            # =========================================================================
+            # CASE A: PROFILE MODE (NO MEDIA DETECTED - SNUG 124px)
+            # =========================================================================
+            if not self.has_media:
+                card_y = 38.0
+                tile_size = 46.0
+                tile_rect = QRectF(media_left, card_y, tile_size, tile_size)
+
+                # Robot Mascot Avatar Tile
+                tile_grad = QLinearGradient(tile_rect.topLeft(), tile_rect.bottomRight())
+                tile_grad.setColorAt(0.0, QColor("#111827"))
+                tile_grad.setColorAt(1.0, QColor("#0B0F19"))
+                painter.setBrush(QBrush(tile_grad))
+                painter.setPen(QPen(QColor(56, 189, 248, 60), 1.0))
+                painter.drawRoundedRect(tile_rect, 12.0, 12.0)
+                self._draw_robot_mascot(painter, tile_rect.center(), time.perf_counter())
+
+                # Profile Name + Verified Cyan Badge
+                text_x = tile_rect.right() + 14.0
+                name_y = card_y + 4.0
+                painter.setFont(_font("Segoe UI", 11.2, QFont.Weight.Bold))
+                painter.setPen(QColor("#FFFFFF"))
+                fm_name = painter.fontMetrics()
+                display_name = fm_name.elidedText(self.profile_name, Qt.TextElideMode.ElideRight, 160)
+                painter.drawText(QRectF(text_x, name_y, 160.0, 20.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, display_name)
+
+                # Verified Badge
+                drawn_name_w = fm_name.horizontalAdvance(display_name)
+                badge_cx = text_x + drawn_name_w + 10.0
+                badge_cy = name_y + 10.0
+                badge_r = 5.5
+                painter.setPen(Qt.PenStyle.NoPen)
+                badge_grad = QLinearGradient(badge_cx - badge_r, badge_cy - badge_r, badge_cx + badge_r, badge_cy + badge_r)
+                badge_grad.setColorAt(0.0, QColor("#00F5FF"))
+                badge_grad.setColorAt(1.0, QColor("#3B82F6"))
+                painter.setBrush(QBrush(badge_grad))
+                painter.drawEllipse(QPointF(badge_cx, badge_cy), badge_r, badge_r)
+                painter.setPen(QPen(QColor("#FFFFFF"), 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+                painter.drawLine(QPointF(badge_cx - 2.0, badge_cy - 0.2), QPointF(badge_cx - 0.4, badge_cy + 1.6))
+                painter.drawLine(QPointF(badge_cx - 0.4, badge_cy + 1.6), QPointF(badge_cx + 2.0, badge_cy - 1.4))
+
+                # Glowing Online Diode + Status Subtitle
+                status_y = name_y + 22.0
+                diode_cx = text_x + 4.0
+                diode_cy = status_y + 8.5
+                painter.setBrush(QBrush(QColor(74, 222, 128, 50)))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawEllipse(QPointF(diode_cx, diode_cy), 4.5, 4.5)
+                painter.setBrush(QBrush(QColor("#4ADE80")))
+                painter.drawEllipse(QPointF(diode_cx, diode_cy), 2.5, 2.5)
+
+                painter.setFont(_font("Segoe UI", 8.8, QFont.Weight.Medium))
+                painter.setPen(QColor("#94A3B8"))
+                display_status = painter.fontMetrics().elidedText(self.profile_status, Qt.TextElideMode.ElideRight, 170)
+                painter.drawText(QRectF(text_x + 14.0, status_y, 170.0, 17.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, display_status)
+
+                # Ambient Idle Wavebars (Right Side) - Eliminates empty void!
+                waves_w = 80.0
+                waves_start_x = x + w - margin - waves_w
+                waves_count = 11
+                waves_spacing = waves_w / waves_count
+                for wi in range(waves_count):
+                    val = 0.4 + 0.3 * math.sin(wi * 0.7 + self.wave_phase * 0.5)
+                    bh = max(3.0, val * 18.0)
+                    bx = waves_start_x + wi * waves_spacing
+                    by = card_y + 23.0 - (bh / 2.0)
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(QBrush(QColor(56, 189, 248, int(80 + val * 120))))
+                    painter.drawRoundedRect(QRectF(bx, by, 2.2, bh), 1.1, 1.1)
+
+                # Clear playback and volume controls in profile mode
+                self.btn_lyrics_rect = QRectF()
+                self.btn_prev_rect = QRectF()
+                self.btn_play_rect = QRectF()
+                self.btn_next_rect = QRectF()
+                self.btn_volume_down_rect = QRectF()
+                self.btn_volume_up_rect = QRectF()
+                self.btn_skip_ad_rect = QRectF()
+                self.btn_speaker_rect = QRectF()
+                self.vol_group_rect = QRectF()
+                self.vol_track_rect = QRectF()
+                self.seek_rect = QRectF()
+
+            # =========================================================================
+            # CASE B: MEDIA PLAYER HUB (PLAYING OR PAUSED)
+            # =========================================================================
+            else:
+                track_y = 38.0
+                art_size = 46.0
+                art_rect = QRectF(media_left, track_y, art_size, art_size)
+
+                # 1. Album Artwork Squircle (12px radius)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(QColor(0, 0, 0, 100)))
+                painter.drawRoundedRect(art_rect.translated(0.0, 2.0), 12.0, 12.0)
 
                 if not self.album_art.isNull():
                     art_clip = QPainterPath()
                     art_clip.addRoundedRect(art_rect, 12.0, 12.0)
                     painter.save()
                     painter.setClipPath(art_clip)
-                    painter.drawPixmap(
-                        art_rect,
-                        self.album_art,
-                        QRectF(self.album_art.rect()),
-                    )
+                    painter.drawPixmap(art_rect, self.album_art, QRectF(self.album_art.rect()))
                     painter.restore()
                 else:
-                    painter.setPen(QColor("#171C35"))
-                    painter.setFont(QFont("Segoe UI Symbol", 20, QFont.Weight.DemiBold))
+                    art_grad = QLinearGradient(art_rect.topLeft(), art_rect.bottomRight())
+                    art_grad.setColorAt(0.0, QColor("#6366F1"))
+                    art_grad.setColorAt(1.0, QColor("#3B82F6"))
+                    painter.setBrush(QBrush(art_grad))
+                    painter.drawRoundedRect(art_rect, 12.0, 12.0)
+                    painter.setFont(_font("Segoe UI Symbol", 16.0, QFont.Weight.Bold))
+                    painter.setPen(QColor("#FFFFFF"))
                     painter.drawText(art_rect, Qt.AlignmentFlag.AlignCenter, "♫")
 
                 painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.setPen(QPen(QColor(255, 255, 255, 48), 1.0))
-                painter.drawRoundedRect(art_rect, 12.0, 12.0)
-            else:
-                # --- RED BOX: Robot Mascot Avatar Tile ---
-                tile_grad = QLinearGradient(art_rect.topLeft(), art_rect.bottomRight())
-                tile_grad.setColorAt(0.0, QColor(18, 22, 34, 230))
-                tile_grad.setColorAt(1.0, QColor(8, 10, 18, 245))
-                painter.setPen(QPen(QColor(0, 245, 255, 80), 1.2))
-                painter.setBrush(QBrush(tile_grad))
+                painter.setPen(QPen(QColor(255, 255, 255, 30), 0.8))
                 painter.drawRoundedRect(art_rect, 12.0, 12.0)
 
-                # Draw the animated front-facing mecha robot mascot (scaled 1.75x)
-                self._draw_robot_mascot(painter, art_rect.center(), time.perf_counter(), scale=1.75)
+                # 2. Song Title & Subtitle (Cassandra · Cinta Terbaik)
+                text_left = media_left + art_size + 10.0
+                eq_w = 84.0
+                text_max_w = max(40.0, media_w_area - art_size - 14.0 - eq_w - 6.0)
 
-            text_x = art_rect.right() + 12.0
-            show_visualizer = self.has_media and media_w >= 280.0
-
-            # Transport cluster geometry on bottom right (prev, play, next)
-            button_y = 114.0
-            btn_size = 30.0
-            play_size = 34.0
-            trans_gap = 6.0
-            total_trans_w = (btn_size * 2.0) + play_size + (trans_gap * 2.0)  # 106.0px
-            right_edge = media_x + media_w - margin
-            trans_center_x = right_edge - (total_trans_w / 2.0)
-
-            # Dedicated Audio-Reactive Cyan-to-Magenta Spectrum Equalizer
-            # Perfectly aligned with the vertical center axis of the transport controls (trans_center_x)
-            # and vertically centered with the header row (header_center_y = 70.0px)
-            vis_h = 42.0
-            vis_w = 88.0
-            vis_x = trans_center_x - (vis_w / 2.0)
-            vis_rect = QRectF(vis_x, header_center_y - (vis_h / 2.0), vis_w, vis_h)
-
-            if show_visualizer:
-                text_w = max(40.0, vis_x - 14.0 - text_x)
-            else:
-                text_w = max(40.0, right_edge - text_x)
-
-            art_top = art_rect.top()
-            art_h = art_rect.height()
-
-            if not self.has_media:
-                # --- GREEN BOX: User Profile (Name + Verified Badge, Online Diode + Status/Bio) ---
-                content_total_h = 38.0
-                start_y = art_top + (art_h - content_total_h) / 2.0
-
-                # 1. Profile Name + Verified Badge
-                painter.setFont(_font("Segoe UI", 11.0, QFont.Weight.Bold))
-                painter.setPen(QColor("#FFFFFF"))
-                fm_name = painter.fontMetrics()
-                name_tw = fm_name.horizontalAdvance(self.profile_name)
-                max_name_w = max(30.0, text_w - 20.0)
-                display_name = fm_name.elidedText(self.profile_name, Qt.TextElideMode.ElideRight, int(max_name_w))
-                painter.drawText(
-                    QRectF(text_x, start_y, max_name_w, 20.0),
-                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                    display_name,
-                )
-
-                # Draw verified micro-badge beside name
-                drawn_name_w = fm_name.horizontalAdvance(display_name)
-                badge_x = text_x + drawn_name_w + 7.0
-                badge_cy = start_y + 10.0
-                badge_r = 5.5
-                painter.setPen(Qt.PenStyle.NoPen)
-                badge_grad = QLinearGradient(badge_x - badge_r, badge_cy - badge_r, badge_x + badge_r, badge_cy + badge_r)
-                badge_grad.setColorAt(0.0, QColor("#00F5FF"))
-                badge_grad.setColorAt(1.0, QColor("#3B82F6"))
-                painter.setBrush(QBrush(badge_grad))
-                painter.drawEllipse(QPointF(badge_x, badge_cy), badge_r, badge_r)
-
-                painter.setPen(QPen(QColor("#FFFFFF"), 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-                painter.drawLine(QPointF(badge_x - 2.2, badge_cy - 0.2), QPointF(badge_x - 0.5, badge_cy + 1.6))
-                painter.drawLine(QPointF(badge_x - 0.5, badge_cy + 1.6), QPointF(badge_x + 2.2, badge_cy - 1.4))
-
-                # 2. Glowing Online Status Indicator Diode + Status/Bio
-                diode_x = text_x + 3.5
-                diode_cy = start_y + 28.5
-                painter.setBrush(QBrush(QColor(16, 185, 129, 65)))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawEllipse(QPointF(diode_x, diode_cy), 4.5, 4.5)
-                painter.setBrush(QBrush(QColor("#10B981")))
-                painter.drawEllipse(QPointF(diode_x, diode_cy), 2.5, 2.5)
-
-                painter.setFont(_font("Segoe UI", 8.8, QFont.Weight.Medium))
-                painter.setPen(QColor("#94A3B8"))
-                status_start_x = text_x + 13.0
-                status_max_w = max(20.0, text_w - 13.0)
-                display_status = painter.fontMetrics().elidedText(
-                    self.profile_status, Qt.TextElideMode.ElideRight, int(status_max_w)
-                )
-                painter.drawText(
-                    QRectF(status_start_x, start_y + 20.0, status_max_w, 17.0),
-                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                    display_status,
-                )
-            else:
                 has_distinct_album = (
                     bool(self.track_album)
                     and self.track_album.strip()
                     and self.track_album.strip().lower() not in (
                         self.track_title.strip().lower(),
                         self.track_artist.strip().lower(),
-                        "unknown album",
-                        "single",
+                        "unknown album", "single",
                     )
                 )
                 if self.track_artist and has_distinct_album:
                     subtitle = f"{self.track_artist} · {self.track_album}"
                 elif self.track_artist:
                     subtitle = self.track_artist
-                elif has_distinct_album:
-                    subtitle = self.track_album
                 else:
-                    subtitle = ""
+                    subtitle = self.track_album or ""
 
-                if subtitle:
-                    content_total_h = 40.0
-                    start_y = art_top + (art_h - content_total_h) / 2.0
+                painter.setFont(_font("Segoe UI", 10.2, QFont.Weight.Bold))
+                painter.setPen(QColor("#FFFFFF"))
+                elided_title = painter.fontMetrics().elidedText(self.track_title, Qt.TextElideMode.ElideRight, int(text_max_w))
+                painter.drawText(QRectF(text_left, track_y + 4.0, text_max_w, 20.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_title)
 
-                    painter.setFont(_font("Segoe UI", 11.0, QFont.Weight.Bold))
-                    painter.setPen(QColor("#FFFFFF"))
-                    expanded_title = painter.fontMetrics().elidedText(
-                        self.track_title, Qt.TextElideMode.ElideRight, int(text_w)
-                    )
-                    painter.drawText(
-                        QRectF(text_x, start_y, text_w, 21.0),
-                        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                        expanded_title,
-                    )
+                painter.setFont(_font("Segoe UI", 8.6, QFont.Weight.Medium))
+                painter.setPen(QColor("#94A3B8"))
+                elided_subtitle = painter.fontMetrics().elidedText(subtitle, Qt.TextElideMode.ElideRight, int(text_max_w))
+                painter.drawText(QRectF(text_left, track_y + 24.0, text_max_w, 18.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_subtitle)
 
-                    painter.setFont(_font("Segoe UI", 8.8, QFont.Weight.Medium))
-                    painter.setPen(QColor("#9AA8BD"))
-                    expanded_subtitle = painter.fontMetrics().elidedText(
-                        subtitle, Qt.TextElideMode.ElideRight, int(text_w)
-                    )
-                    painter.drawText(
-                        QRectF(text_x, start_y + 22.0, text_w, 18.0),
-                        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                        expanded_subtitle,
-                    )
-                else:
-                    start_y = art_top + (art_h - 24.0) / 2.0
-                    painter.setFont(_font("Segoe UI", 11.0, QFont.Weight.Bold))
-                    painter.setPen(QColor("#FFFFFF"))
-                    expanded_title = painter.fontMetrics().elidedText(
-                        self.track_title, Qt.TextElideMode.ElideRight, int(text_w)
-                    )
-                    painter.drawText(
-                        QRectF(text_x, start_y, text_w, 24.0),
-                        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                        expanded_title,
-                    )
+                # 3. Silk Audio Equalizer (13 bars) on Right
+                eq_start_x = media_left + media_w_area - eq_w
+                bar_count = 13
+                bar_spacing = eq_w / bar_count
+                eq_grad = QLinearGradient(eq_start_x, track_y + 10.0, eq_start_x + eq_w, track_y + 36.0)
+                eq_grad.setColorAt(0.0, QColor("#38BDF8"))
+                eq_grad.setColorAt(1.0, QColor("#C084FC"))
 
-            # Dedicated Dot-Matrix Audio-Reactive Visualizer (Screenshoot 2 Style)
-            if self.has_media and show_visualizer:
-                self._paint_dot_matrix_equalizer(painter, vis_rect)
-            skip_ready = self.youtube_ad_detected and self.youtube_can_skip
-            if self.has_media or skip_ready:
-                compact = media_w < 330.0
-                margin = 16.0
-                control_gap = 6.0 if media_w >= 340.0 else 4.0
-
-                # Unified height & geometry: All interactive control modules share the same 30.0px height
-                row_h = 30.0
-                radius = row_h / 2.0  # 15.0px pill/circle radius
-                button_y = 114.0
-
-                # 1. Lyrics toggle button (only shown when media is playing from Spotify)
-                if self.is_spotify_active:
-                    self.btn_lyrics_rect = QRectF(
-                        media_x + margin, button_y, row_h, row_h
-                    )
-                    lyrics_t = self.btn_hover_anim.get("lyrics", 0.0)
-                    lyrics_active = self.lyrics_open
-                    if lyrics_active:
-                        lyrics_fill = _interpolate_color(QColor(255, 255, 255, 36), QColor(255, 255, 255, 55), lyrics_t)
-                        lyrics_border = _interpolate_color(QColor(167, 243, 208, 120), QColor(167, 243, 208, 200), lyrics_t)
+                is_active_audio = self.is_playing or getattr(self, "_system_audio_active", False)
+                for i in range(bar_count):
+                    if is_active_audio:
+                        col_idx = min(len(self.eq_col_heights) - 1, int(i * (len(self.eq_col_heights) / bar_count)))
+                        act_energy = min(1.0, max(0.0, self.eq_col_heights[col_idx] / 11.0))
+                        bh = max(3.5, act_energy * 22.0)
                     else:
-                        lyrics_fill = _interpolate_color(QColor(255, 255, 255, 16), QColor(255, 255, 255, 34), lyrics_t)
-                        lyrics_border = _interpolate_color(QColor(255, 255, 255, 24), QColor(255, 255, 255, 50), lyrics_t)
+                        bh = 4.0
+                    bx = eq_start_x + i * bar_spacing
+                    by = track_y + 23.0 - (bh / 2.0)
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(QBrush(eq_grad if is_active_audio else QColor(148, 163, 184, 120)))
+                    painter.drawRoundedRect(QRectF(bx, by, 2.4, bh), 1.2, 1.2)
 
-                    painter.setPen(QPen(lyrics_border, 1.2 if lyrics_active else 1.0))
-                    painter.setBrush(QBrush(lyrics_fill))
-                    painter.drawRoundedRect(self.btn_lyrics_rect, radius, radius)
+                # 4. Dedicated Full-Width Seekbar Row (seek_y = 94.0)
+                seek_y = 94.0
+                seek_w = media_w_area
+                self.seek_rect = QRectF(media_left, seek_y - 4.0, seek_w, 16.0)
 
-                    lyrics_icon_color = (
-                        QColor("#A7F3D0")
-                        if lyrics_active
-                        else _interpolate_color(QColor("#D6DFEB"), QColor("#FFFFFF"), lyrics_t)
-                    )
-                    self._draw_lyrics_icon(painter, self.btn_lyrics_rect, lyrics_active, lyrics_icon_color)
-                    volume_x = self.btn_lyrics_rect.right() + control_gap
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(QColor(255, 255, 255, 20)))
+                painter.drawRoundedRect(QRectF(media_left, seek_y, seek_w, 3.2), 1.6, 1.6)
+
+                display_pos = self.display_position_seconds()
+                dur = self.duration_seconds
+                progress = min(1.0, max(0.0, display_pos / dur)) if dur > 0 else 0.0
+                prog_w = seek_w * progress
+
+                if prog_w > 0.0:
+                    played_grad = QLinearGradient(media_left, seek_y, media_left + prog_w, seek_y)
+                    played_grad.setColorAt(0.0, QColor("#38BDF8"))
+                    played_grad.setColorAt(1.0, QColor("#60A5FA"))
+                    painter.setBrush(QBrush(played_grad))
+                    painter.drawRoundedRect(QRectF(media_left, seek_y, prog_w, 3.2), 1.6, 1.6)
+
+                # Thumb
+                painter.setBrush(QBrush(QColor("#FFFFFF")))
+                painter.setPen(QPen(QColor(56, 189, 248, 180), 1.2))
+                painter.drawEllipse(QPointF(media_left + prog_w, seek_y + 1.6), 4.2, 4.2)
+
+                # Time Labels
+                painter.setFont(_font("Segoe UI", 7.6, QFont.Weight.Medium))
+                painter.setPen(QColor("#64748B"))
+                painter.drawText(QRectF(media_left, seek_y + 4.0, 50.0, 14.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.format_time(display_pos))
+                painter.drawText(QRectF(media_left + seek_w - 50.0, seek_y + 4.0, 50.0, 14.0), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, self.format_time(dur))
+
+                # 5. Bottom Row: Controls & Volume Slider (ctrl_y = 117.0)
+                ctrl_y = 117.0
+
+                # 5a. Lyrics Button (Left)
+                if self.is_spotify_active:
+                    self.btn_lyrics_rect = QRectF(media_left, ctrl_y, 25.0, 25.0)
+                    lyrics_active = self.lyrics_open
+                    painter.setBrush(QBrush(QColor(56, 189, 248, 40) if lyrics_active else QColor(255, 255, 255, 12)))
+                    painter.setPen(QPen(QColor(56, 189, 248, 180) if lyrics_active else QColor(255, 255, 255, 20), 0.8))
+                    painter.drawRoundedRect(self.btn_lyrics_rect, 7.0, 7.0)
+                    painter.setFont(_font("Segoe UI", 9.5, QFont.Weight.DemiBold))
+                    painter.setPen(QColor("#38BDF8") if lyrics_active else QColor("#E2E8F0"))
+                    painter.drawText(self.btn_lyrics_rect, Qt.AlignmentFlag.AlignCenter, "♫")
+                    vol_group_x = self.btn_lyrics_rect.right() + 8.0
                 else:
                     self.btn_lyrics_rect = QRectF()
-                    volume_x = media_x + margin
+                    vol_group_x = media_left
 
-                # 2. Volume controls: Animated Interactive Speaker + Smooth Volume Slider
-                vol_group_w = 104.0 if media_w >= 350.0 else 92.0
-                self.vol_group_rect = QRectF(volume_x, button_y, vol_group_w, row_h)
-                self.btn_speaker_rect = QRectF(volume_x, button_y, 26.0, row_h)
-                
-                # Volume slider track inside the capsule
-                vol_track_x = volume_x + 27.0
-                vol_track_w = vol_group_w - 35.0
-                vol_track_h = 4.0
-                vol_track_y = button_y + (row_h - vol_track_h) / 2.0
-                self.vol_track_rect = QRectF(vol_track_x, vol_track_y, vol_track_w, vol_track_h)
-                
-                # Clear legacy volume down/up rects
-                self.btn_volume_down_rect = QRectF()
-                self.btn_volume_up_rect = QRectF()
+                # 5b. Speaker Icon + Volume Slider Capsule [ 🔈 ═════●───── ]
+                vol_group_w = 100.0
+                self.vol_group_rect = QRectF(vol_group_x, ctrl_y, vol_group_w, 25.0)
+                self.btn_speaker_rect = QRectF(vol_group_x, ctrl_y, 24.0, 25.0)
+
+                vol_track_x = vol_group_x + 24.0
+                vol_track_w = 68.0
+                vol_track_y = ctrl_y + 11.0
+                self.vol_track_rect = QRectF(vol_track_x, vol_track_y, vol_track_w, 3.0)
 
                 # Capsule Background
                 speaker_hovered = self.hovered_btn == "speaker_mute"
                 slider_hovered = self.hovered_btn == "volume_slider" or getattr(self, "is_dragging_volume", False)
-                vol_capsule_bg = _interpolate_color(
-                    QColor(255, 255, 255, 12),
-                    QColor(255, 255, 255, 24),
-                    1.0 if (speaker_hovered or slider_hovered) else 0.0,
-                )
-                painter.setPen(QPen(QColor(255, 255, 255, 22), 1.0))
-                painter.setBrush(QBrush(vol_capsule_bg))
-                painter.drawRoundedRect(self.vol_group_rect, radius, radius)
+                painter.setBrush(QBrush(QColor(255, 255, 255, 18 if (speaker_hovered or slider_hovered) else 11)))
+                painter.setPen(QPen(QColor(255, 255, 255, 16), 0.8))
+                painter.drawRoundedRect(self.vol_group_rect, 7.0, 7.0)
 
-                # Query current master volume level and mute status
                 if not getattr(self, "is_dragging_volume", False):
                     self.current_volume_scalar = self.audio_controller.get_volume()
                     self.is_audio_muted = self.audio_controller.is_muted()
-                
+
                 cur_vol = getattr(self, "current_volume_scalar", 0.5)
                 is_muted = getattr(self, "is_audio_muted", False)
                 vol_pulse = getattr(self, "volume_pulse", 0.0)
 
-                # Draw Animated Speaker Icon on the left
+                # Draw Animated Speaker Icon
                 speaker_col = QColor("#F87171") if (is_muted or cur_vol <= 0.001) else (
-                    _interpolate_color(QColor("#CBD5E1"), QColor("#FFFFFF"), 1.0 if speaker_hovered else 0.0)
+                    _interpolate_color(QColor("#94A3B8"), QColor("#FFFFFF"), 1.0 if speaker_hovered else 0.0)
                 )
                 self._draw_animated_speaker_icon(
                     painter,
-                    self.btn_speaker_rect.center().x(),
+                    self.btn_speaker_rect.center().x() - 1.0,
                     self.btn_speaker_rect.center().y(),
                     0.0 if is_muted else cur_vol,
                     pulse=vol_pulse,
@@ -4925,41 +5018,31 @@ class DesktopDynamicIsland(QWidget):
                     color=speaker_col,
                 )
 
-                # Slider Track Background
+                # Volume Track Background
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QBrush(QColor(255, 255, 255, 26)))
-                painter.drawRoundedRect(self.vol_track_rect, vol_track_h / 2.0, vol_track_h / 2.0)
+                painter.setBrush(QBrush(QColor(255, 255, 255, 24)))
+                painter.drawRoundedRect(self.vol_track_rect, 1.5, 1.5)
 
-                # Slider Filled Track
+                # Volume Track Filled
                 fill_ratio = 0.0 if is_muted else max(0.0, min(1.0, cur_vol))
-                filled_w = vol_track_w * fill_ratio
-                if filled_w > 0.0:
-                    vol_grad = QLinearGradient(vol_track_x, vol_track_y, vol_track_x + filled_w, vol_track_y)
-                    vol_grad.setColorAt(0.0, QColor("#38BDF8"))
-                    vol_grad.setColorAt(1.0, QColor("#60A5FA"))
-                    painter.setBrush(QBrush(vol_grad))
-                    painter.drawRoundedRect(
-                        QRectF(vol_track_x, vol_track_y, filled_w, vol_track_h),
-                        vol_track_h / 2.0,
-                        vol_track_h / 2.0,
-                    )
+                vol_val_w = vol_track_w * fill_ratio
+                if vol_val_w > 0.0:
+                    vol_fill_grad = QLinearGradient(vol_track_x, vol_track_y, vol_track_x + vol_val_w, vol_track_y)
+                    vol_fill_grad.setColorAt(0.0, QColor("#38BDF8"))
+                    vol_fill_grad.setColorAt(1.0, QColor("#60A5FA"))
+                    painter.setBrush(QBrush(vol_fill_grad))
+                    painter.drawRoundedRect(QRectF(vol_track_x, vol_track_y, vol_val_w, 3.0), 1.5, 1.5)
 
-                # Slider Thumb
-                thumb_x = vol_track_x + filled_w
-                thumb_y = vol_track_y + (vol_track_h / 2.0)
-                thumb_r = 3.6 if not slider_hovered else 4.2
-                painter.setPen(QPen(QColor(56, 189, 248, 180), 1.0))
+                # Thumb
                 painter.setBrush(QBrush(QColor("#FFFFFF")))
-                painter.drawEllipse(QPointF(thumb_x, thumb_y), thumb_r, thumb_r)
+                painter.setPen(QPen(QColor(56, 189, 248, 200), 1.0))
+                painter.drawEllipse(QPointF(vol_track_x + vol_val_w, vol_track_y + 1.5), 3.8, 3.8)
 
+                # 5c. Transport Controls or YouTube Skip Ad
+                skip_ready = self.youtube_ad_detected and self.youtube_can_skip
                 if skip_ready:
-                    skip_width = min(126.0, max(92.0, media_w * 0.30))
-                    self.btn_skip_ad_rect = QRectF(
-                        media_x + media_w - margin - skip_width,
-                        button_y,
-                        skip_width,
-                        row_h,
-                    )
+                    skip_width = min(126.0, max(92.0, media_w_area * 0.30))
+                    self.btn_skip_ad_rect = QRectF(media_left + media_w_area - skip_width, ctrl_y, skip_width, 25.0)
                     self.btn_prev_rect = QRectF()
                     self.btn_play_rect = QRectF()
                     self.btn_next_rect = QRectF()
@@ -4970,191 +5053,69 @@ class DesktopDynamicIsland(QWidget):
                     skip_border = QColor(255, 255, 255, 60) if not skip_stale else QColor(100, 95, 80)
                     painter.setPen(QPen(skip_border, 1.0))
                     painter.setBrush(QBrush(skip_bg))
-                    painter.drawRoundedRect(self.btn_skip_ad_rect, radius, radius)
+                    painter.drawRoundedRect(self.btn_skip_ad_rect, 12.5, 12.5)
 
                     skip_icon = QPainterPath()
-                    skip_icon.moveTo(self.btn_skip_ad_rect.left() + 12.0, button_y + 9.0)
-                    skip_icon.lineTo(self.btn_skip_ad_rect.left() + 20.0, button_y + 15.0)
-                    skip_icon.lineTo(self.btn_skip_ad_rect.left() + 12.0, button_y + 21.0)
+                    skip_icon.moveTo(self.btn_skip_ad_rect.left() + 10.0, ctrl_y + 7.0)
+                    skip_icon.lineTo(self.btn_skip_ad_rect.left() + 17.0, ctrl_y + 12.5)
+                    skip_icon.lineTo(self.btn_skip_ad_rect.left() + 10.0, ctrl_y + 18.0)
                     skip_icon.closeSubpath()
                     painter.setPen(Qt.PenStyle.NoPen)
                     skip_text_color = QColor("#090D16" if not skip_stale else "#2A261C")
                     painter.setBrush(QBrush(skip_text_color))
                     painter.drawPath(skip_icon)
-                    painter.drawRoundedRect(
-                        QRectF(self.btn_skip_ad_rect.left() + 22.0, button_y + 9.0, 2.2, 12.0),
-                        1.0,
-                        1.0,
-                    )
+                    painter.drawRoundedRect(QRectF(self.btn_skip_ad_rect.left() + 19.0, ctrl_y + 7.0, 2.0, 11.0), 1.0, 1.0)
                     painter.setPen(skip_text_color)
-                    painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
-                    painter.drawText(
-                        QRectF(self.btn_skip_ad_rect.left() + 29.0, button_y, skip_width - 36.0, row_h),
-                        Qt.AlignmentFlag.AlignCenter,
-                        "Buka tab" if skip_stale and self.youtube_skip_stale_clicked else "Skip iklan",
-                    )
-                elif self.has_media:
-                    self.btn_skip_ad_rect = QRectF()
-                    # 3. Harmonized Transport Group (Prev, Play, Next)
-                    # Standalone circular buttons: Apple iOS Dynamic Island & macOS Now Playing aesthetic
-                    btn_size = 30.0
-                    play_size = 34.0
-                    trans_gap = 6.0
-                    right_edge = media_x + media_w - margin
-
-                    self.btn_next_rect = QRectF(
-                        right_edge - btn_size,
-                        button_y,
-                        btn_size,
-                        btn_size,
-                    )
-                    self.btn_play_rect = QRectF(
-                        self.btn_next_rect.left() - trans_gap - play_size,
-                        button_y - 2.0,
-                        play_size,
-                        play_size,
-                    )
-                    self.btn_prev_rect = QRectF(
-                        self.btn_play_rect.left() - trans_gap - btn_size,
-                        button_y,
-                        btn_size,
-                        btn_size,
-                    )
-
-                    # Prev & Next circular buttons (Apple frosted flat circles)
-                    for name, rect, enabled, forward in (
-                        ("prev", self.btn_prev_rect, self.can_previous, False),
-                        ("next", self.btn_next_rect, self.can_next, True),
-                    ):
-                        skip_t = self.btn_hover_anim.get(name, 0.0)
-                        btn_bg = _interpolate_color(QColor(255, 255, 255, 16), QColor(255, 255, 255, 34), skip_t if enabled else 0.0)
-                        btn_border = _interpolate_color(QColor(255, 255, 255, 24), QColor(255, 255, 255, 55), skip_t if enabled else 0.0)
-                        painter.setPen(QPen(btn_border, 1.0))
-                        painter.setBrush(QBrush(btn_bg))
-                        painter.drawEllipse(rect)
-
-                        icon_col = (
-                            _interpolate_color(QColor("#D6DFEB"), QColor("#FFFFFF"), skip_t)
-                            if enabled
-                            else QColor(148, 163, 184, 70)
-                        )
-                        self._draw_track_skip_icon(painter, rect, forward, icon_col)
-
-                    # Play / Pause hero action button (Apple signature solid flat white circle)
-                    play_enabled = self.can_play_pause
-                    play_t = self.btn_hover_anim.get("play", 0.0)
-
-                    if play_enabled:
-                        play_bg = _interpolate_color(QColor("#FFFFFF"), QColor("#F1F5F9"), play_t)
-                        play_border = _interpolate_color(QColor(255, 255, 255, 140), QColor(255, 255, 255, 220), play_t)
-                        icon_col = QColor("#090D16")
-                    else:
-                        play_bg = QColor(255, 255, 255, 30)
-                        play_border = QColor(255, 255, 255, 20)
-                        icon_col = QColor("#64748B")
-
-                    painter.setPen(QPen(play_border, 1.0))
-                    painter.setBrush(QBrush(play_bg))
-                    painter.drawEllipse(self.btn_play_rect)
-                    self._draw_play_pause_icon(
-                        painter,
-                        self.btn_play_rect,
-                        self.is_playing,
-                        icon_col,
-                    )
-
+                    painter.setFont(_font("Segoe UI", 7.8, QFont.Weight.Bold))
+                    painter.drawText(QRectF(self.btn_skip_ad_rect.left() + 24.0, ctrl_y, skip_width - 28.0, 25.0), Qt.AlignmentFlag.AlignCenter, "Skip iklan")
                 else:
-                    self.btn_lyrics_rect = QRectF()
                     self.btn_skip_ad_rect = QRectF()
-                    self.btn_prev_rect = QRectF()
-                    self.btn_play_rect = QRectF()
-                    self.btn_next_rect = QRectF()
+                    play_cx = media_left + media_w_area - 46.0
+                    prev_cx = play_cx - 36.0
+                    next_cx = play_cx + 36.0
 
-                # Time and progress share the space between the volume and
-                # transport clusters; short widths gracefully omit the end time.
-                if self.has_media:
-                    progress_x = self.vol_group_rect.right() + (10.0 if compact else 12.0)
-                    right_control = (
-                        self.btn_skip_ad_rect.left()
-                        if skip_ready
-                        else self.btn_prev_rect.left()
-                    )
-                    progress_right = right_control - (8.0 if compact else 12.0)
-                    progress_w = max(0.0, progress_right - progress_x)
-                    if progress_w > 8.0:
-                        track_height = 3.6
-                        progress_y = button_y + 8.2
-                        track_rect = QRectF(progress_x, progress_y, progress_w, track_height)
-                        painter.setPen(Qt.PenStyle.NoPen)
-                        painter.setBrush(QBrush(QColor(255, 255, 255, 28)))
-                        painter.drawRoundedRect(track_rect, track_height / 2.0, track_height / 2.0)
+                    self.btn_prev_rect = QRectF(prev_cx - 12.0, ctrl_y, 24.0, 25.0)
+                    self.btn_play_rect = QRectF(play_cx - 14.0, ctrl_y - 2.0, 28.0, 28.0)
+                    self.btn_next_rect = QRectF(next_cx - 12.0, ctrl_y, 24.0, 25.0)
 
-                        display_position = self.display_position_seconds()
-                        progress = (
-                            min(1.0, display_position / self.duration_seconds)
-                            if self.duration_seconds > 0
-                            else 0.0
-                        )
-                        fill_w = progress_w * progress
-                        if fill_w > 0.0:
-                            painter.setBrush(QBrush(QColor(255, 255, 255, 220)))
-                            painter.drawRoundedRect(
-                                QRectF(progress_x, progress_y, fill_w, track_height),
-                                track_height / 2.0,
-                                track_height / 2.0,
-                            )
-                        thumb_x = progress_x + fill_w
-                        painter.setPen(QPen(QColor(255, 255, 255, 180), 1.0))
-                        painter.setBrush(QBrush(QColor("#FFFFFF")))
-                        painter.drawEllipse(QPointF(thumb_x, progress_y + (track_height / 2.0)), 2.8, 2.8)
+                    # Prev
+                    prev_t = self.btn_hover_anim.get("prev", 0.0)
+                    painter.setFont(_font("Segoe UI Symbol", 10.5, QFont.Weight.Bold))
+                    painter.setPen(_interpolate_color(QColor("#CBD5E1"), QColor("#FFFFFF"), prev_t) if self.can_previous else QColor(148, 163, 184, 70))
+                    painter.drawText(self.btn_prev_rect, Qt.AlignmentFlag.AlignCenter, "⏮")
 
-                        painter.setFont(_font("Segoe UI", 7.8, QFont.Weight.Medium))
-                        painter.setPen(QColor("#94A3B8"))
-                        painter.drawText(
-                            QRectF(progress_x, button_y + 16.0, min(48.0, progress_w), 13.0),
-                            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                            self.format_time(display_position),
-                        )
-                        if progress_w >= 92.0:
-                            painter.setPen(QColor("#64748B"))
-                            painter.drawText(
-                                QRectF(progress_x, button_y + 16.0, progress_w, 13.0),
-                                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                                self.format_time(self.duration_seconds),
-                            )
-            else:
-                self.btn_lyrics_rect = QRectF()
-                self.btn_prev_rect = QRectF()
-                self.btn_play_rect = QRectF()
-                self.btn_next_rect = QRectF()
-                self.btn_volume_down_rect = QRectF()
-                self.btn_volume_up_rect = QRectF()
-                self.btn_speaker_rect = QRectF()
-                self.vol_group_rect = QRectF()
-                self.vol_track_rect = QRectF()
-                self.btn_skip_ad_rect = QRectF()
+                    # Play / Pause Hero White Circle
+                    play_t = self.btn_hover_anim.get("play", 0.0)
+                    painter.setBrush(QBrush(_interpolate_color(QColor("#F8FAFC"), QColor("#FFFFFF"), play_t)))
+                    painter.setPen(QPen(QColor(255, 255, 255, 70), 0.8))
+                    painter.drawEllipse(self.btn_play_rect)
+                    painter.setPen(QColor("#0F172A"))
+                    painter.setFont(_font("Segoe UI Symbol", 11.0, QFont.Weight.Bold))
+                    painter.drawText(self.btn_play_rect, Qt.AlignmentFlag.AlignCenter, "⏸" if self.is_playing else "▶")
 
-            # Side Lyrics Panel (appears when expanded to the right, only for Spotify)
-            extra_w = max(0.0, w - self.expanded_w)
-            if self.is_spotify_active and extra_w > 1.0:
-                t_fade = min(1.0, extra_w / 75.0)
-                panel_opacity = t_fade * t_fade * (3.0 - 2.0 * t_fade)
-                painter.save()
-                painter.setOpacity(painter.opacity() * panel_opacity)
+                    # Next
+                    next_t = self.btn_hover_anim.get("next", 0.0)
+                    painter.setFont(_font("Segoe UI Symbol", 10.5, QFont.Weight.Bold))
+                    painter.setPen(_interpolate_color(QColor("#CBD5E1"), QColor("#FFFFFF"), next_t) if self.can_next else QColor(148, 163, 184, 70))
+                    painter.drawText(self.btn_next_rect, Qt.AlignmentFlag.AlignCenter, "⏭")
 
-                divider_side_x = media_x + self.expanded_w
-                painter.setPen(QPen(QColor(255, 255, 255, int(22 * panel_opacity)), 1.0))
-                painter.drawLine(QPointF(divider_side_x, 16.0), QPointF(divider_side_x, h - 16.0))
+            # =========================================================================
+            # CASE C: LYRICS SIDE DRAWER (WHEN w > self.expanded_w)
+            # =========================================================================
+            if is_lyrics_expanded:
+                divider_x = media_left + media_w_area + 14.0
+                div_grad = QLinearGradient(divider_x, 34.0, divider_x, h - 18.0)
+                div_grad.setColorAt(0.0, QColor(255, 255, 255, 0))
+                div_grad.setColorAt(0.5, QColor(255, 255, 255, 22))
+                div_grad.setColorAt(1.0, QColor(255, 255, 255, 0))
+                painter.setPen(QPen(QBrush(div_grad), 1.0))
+                painter.drawLine(QPointF(divider_x, 34.0), QPointF(divider_x, h - 18.0))
 
-                panel_x = divider_side_x + 16.0
-                panel_y = 0.0
-                panel_w = max(20.0, (x + w) - panel_x - 16.0)
-                panel_h = h
-                self._paint_side_lyrics_panel(painter, QRectF(panel_x, panel_y, panel_w, panel_h))
-                painter.restore()
+                lyr_x = divider_x + 16.0
+                lyr_w = max(20.0, (x + w) - lyr_x - margin)
+                self._paint_side_lyrics_panel(painter, QRectF(lyr_x, 0.0, lyr_w, h))
 
             painter.restore()  # Restores Page 0 slide & fade transform
-
             indicator_y = max(30.0, h - 14.0)
             # Smoothly follow the center of the media controls throughout side drawer animation
             if self.lyrics_open and self.is_spotify_active and w > self.expanded_w:
