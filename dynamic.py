@@ -5248,8 +5248,14 @@ class DesktopDynamicIsland(QWidget):
             btn_hit_h = 50.0
             btn_y = (h - btn_hit_h) / 2.0
             self.btn_tab_previous_rect = QRectF(x + 2.0, btn_y, btn_hit_w, btn_hit_h)
-            nav_w = min(self.expanded_w, w) if (self.lyrics_open and self.is_spotify_active and w > self.expanded_w) else w
-            self.btn_tab_next_rect = QRectF(x + nav_w - 2.0 - btn_hit_w, btn_y, btn_hit_w, btn_hit_h)
+            is_lyrics_expanded = self.lyrics_open and self.is_spotify_active and (w > self.expanded_w)
+            if is_lyrics_expanded:
+                # Placed precisely in the gap at the right boundary of the media controls area (before the lyrics panel)
+                media_divider_x = x + 16.0 + 360.0 + 14.0
+                next_nav_x = media_divider_x - (btn_hit_w / 2.0)
+            else:
+                next_nav_x = x + w - 2.0 - btn_hit_w
+            self.btn_tab_next_rect = QRectF(next_nav_x, btn_y, btn_hit_w, btn_hit_h)
 
             header_center_y = 70.0  # Mathematically & optically centered between top status bar (y=26) and bottom controls (y=114)
             margin = 16.0
