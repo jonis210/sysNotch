@@ -1976,7 +1976,7 @@ class DesktopDynamicIsland(QWidget):
             prox_eased = prox ** 1.6
             weight = QFont.Weight.Bold if prox > 0.65 else (QFont.Weight.DemiBold if prox > 0.35 else QFont.Weight.Medium)
             font_family = "Segoe UI Symbol" if is_instrumental else "Segoe UI"
-            f_size = (11.0 + (3.0 * prox_eased)) if is_instrumental else (9.8 if prox > 0.65 else 8.8)
+            f_size = 11.0 if is_instrumental else 9.5
             font = _font(font_family, f_size, weight)
             fm = QFontMetricsF(font)
 
@@ -4100,8 +4100,8 @@ class DesktopDynamicIsland(QWidget):
         # zero geometric wobble, zero overshoot, and buttery smooth deceleration.
         sub_dt = dt * 0.25
         if abs(target_w - self.cur_w) > 0.04 or abs(self.vel_w) > 0.08 or abs(target_h - self.cur_h) > 0.04 or abs(self.vel_h) > 0.08:
-            spring_k = 440.0
-            spring_c = 42.0  # 2 * sqrt(440) = 41.95 -> zeta = 42.0 / 41.95 = 1.001
+            spring_k = 480.0
+            spring_c = 44.0  # 2 * sqrt(480) = 43.82 -> zeta = 44.0 / 43.82 = 1.004 (critically damped)
             for _ in range(4):
                 acc_w = spring_k * (target_w - self.cur_w) - spring_c * self.vel_w
                 acc_h = spring_k * (target_h - self.cur_h) - spring_c * self.vel_h
@@ -4111,10 +4111,10 @@ class DesktopDynamicIsland(QWidget):
                 self.cur_w += self.vel_w * sub_dt
                 self.cur_h += self.vel_h * sub_dt
 
-            # Clean settling threshold (zero micro-stutters or jumps)
-            if abs(target_w - self.cur_w) < 0.15 and abs(self.vel_w) < 0.8:
+            # Crisp settling threshold: eliminates long sub-pixel crawl shimmer
+            if abs(target_w - self.cur_w) < 0.75 and abs(self.vel_w) < 14.0:
                 self.cur_w, self.vel_w = target_w, 0.0
-            if abs(target_h - self.cur_h) < 0.15 and abs(self.vel_h) < 0.8:
+            if abs(target_h - self.cur_h) < 0.75 and abs(self.vel_h) < 14.0:
                 self.cur_h, self.vel_h = target_h, 0.0
         else:
             self.cur_w, self.vel_w = target_w, 0.0
@@ -4356,6 +4356,7 @@ class DesktopDynamicIsland(QWidget):
             if button == "lyrics":
                 if self.is_spotify_active:
                     self.lyrics_open = not self.lyrics_open
+                    self.last_time = time.perf_counter()
                     self.update()
                 event.accept()
                 return
@@ -5086,8 +5087,8 @@ class DesktopDynamicIsland(QWidget):
             self.lyrics_anim_progress = lp
 
             base_media_w = min(self.expanded_w, w) - (margin * 2.0)
-            target_media_w = 360.0
-            media_w_area = (1.0 - lp) * base_media_w + lp * target_media_w
+            # Solid media width: eliminates accordion squeeze/stretch jitter so all controls glide as a rigid body
+            media_w_area = base_media_w
 
             # Direct physical centering: algebraically identical to canvas_w/2 when closed,
             # and smoothly moves to media area center with 100% frame-1 physical synchronization!
