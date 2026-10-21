@@ -43,8 +43,15 @@ $RECYCLE.BIN/
 *.sublime-project
 *.sublime-workspace
 
-# --- Temporary Scratch Files ---
+# --- Temporary Scratch Files & Test Artifacts ---
 scratch/
 debug_*.py
 test_*.py
 DynamicIsland_Project/
+assets/test_*.png
+assets/anim_frame_*.png
+assets/actual_*.png
+assets/*comparison*.png
+assets/*inspection*.png
+assets/*proof*.png
+docs/

@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/v2_clean_complete_showcase.png" alt="SysNotch Dynamic Island Clean Showcase" width="820" />
+  <img src="https://raw.githubusercontent.com/jonis210/sysNotch/main/assets/v2_clean_complete_showcase.png" alt="SysNotch Dynamic Island Clean Showcase" width="820" />
 </p>
 
 ---
@@ -69,51 +69,70 @@
 
 ## 📸 Visual Showcase
 
-<div align="center">
-
 ### 1. Minimalist Camera Pill (Collapsed Mode)
-*Mascot robot mini, Living center clock, and real-time mini audio spectrum.*  
-<br/>
-<img src="assets/v2_clean_compact.png" alt="SysNotch Compact Notch Mode" width="300" />
-<br/><br/>
+*Compact camera pill, living center clock, and real-time mini audio spectrum.*
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jonis210/sysNotch/main/assets/v2_clean_compact.png" alt="SysNotch Compact Notch Mode" width="360" />
+</p>
+
+---
 
 ### 2. Profile Hub (No-Media Snug 124px)
-*Minimalist profile card with verified badge, online diode status, and ambient waves.*  
-<br/>
-<img src="assets/v2_clean_nomedia.png" alt="SysNotch Profile Hub Mode" width="460" />
-<br/><br/>
+*Minimalist profile card with verified badge, online diode status, and ambient waves.*
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jonis210/sysNotch/main/assets/v2_clean_nomedia.png" alt="SysNotch Profile Hub Mode" width="520" />
+</p>
+
+---
 
 ### 3. Media Dashboard (Expanded Player Hub)
-*Full playback controls, dynamic audio visualizer, seekbar, and animated speaker volume slider.*  
-<br/>
-<img src="assets/v2_clean_media.png" alt="SysNotch Media Hub Mode" width="520" />
-<br/><br/>
+*Full playback controls, dynamic audio visualizer, seekbar, and animated speaker volume slider.*
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jonis210/sysNotch/main/assets/v2_clean_media.png" alt="SysNotch Media Hub Mode" width="600" />
+</p>
+
+---
 
 ### 4. Synchronized Karaoke Lyrics (Side-Drawer Mode)
-*Centered living clock, internet speed and gear glide smoothly to the right, and 2-line auto-wrap lyrics.*  
-<br/>
-<img src="assets/v2_clean_lyrics.png" alt="SysNotch 2-Line Synced Lyrics" width="760" />
-<br/><br/>
+*Centered living clock, internet speed and gear glide smoothly to the right, and 2-line auto-wrap lyrics.*
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jonis210/sysNotch/main/assets/v2_clean_lyrics.png" alt="SysNotch 2-Line Synced Lyrics" width="800" />
+</p>
+
+---
 
 ### 5. The Drop Vault & QR Teleport (Page 2 File Shelf)
-*Drop zone container, micro action cards (Cut, QR, Delete), and instant local Wi-Fi QR Teleport modal.*  
-<br/>
-<img src="assets/drop_vault_showcase.png" alt="SysNotch Drop Vault Showcase" width="760" />
-<br/><br/>
+*Drop zone container, micro action cards (Cut, QR, Delete), and instant local Wi-Fi QR Teleport modal.*
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jonis210/sysNotch/main/assets/drop_vault_showcase.png" alt="SysNotch Drop Vault Showcase" width="800" />
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jonis210/sysNotch/main/assets/actual_live_drop_vault_final_suite.png" alt="SysNotch Drop Vault Interactive Suite" width="800" />
+</p>
+
+---
 
 ### 6. Obsidian Glass Theme & Gradient Settings
-*Inline gradient editor with 9 squircle color presets, live preview capsule, and hex code input.*  
-<br/>
-<img src="assets/clean_preview_settings.png" alt="SysNotch Theme Settings" width="540" />
-<br/><br/>
+*Inline gradient editor with 9 squircle color presets, live preview capsule, and hex code input.*
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jonis210/sysNotch/main/assets/clean_preview_settings.png" alt="SysNotch Theme Settings" width="560" />
+</p>
+
+---
 
 ### 7. Interactive Animated Speaker Icon
-*5 dynamic states (0% Mute ✕, Low, Mid, High, Pulse) reacting to master volume changes.*  
-<br/>
-<img src="assets/volume_speaker_states.png" alt="SysNotch Speaker States" width="680" />
-<br/>
+*5 dynamic states (0% Mute ✕, Low, Mid, High, Pulse) reacting to master volume changes.*
 
-</div>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jonis210/sysNotch/main/assets/volume_speaker_states.png" alt="SysNotch Speaker States" width="720" />
+</p>
 
 ---
 
@@ -138,7 +157,7 @@
 ### 3. 🤖 Interactive Mascot Companion
 
 <p align="center">
-  <img src="assets/mascot_robot.png" alt="Cyberpunk Robot Mascot Head" width="160" /><br>
+  <img src="https://raw.githubusercontent.com/jonis210/sysNotch/main/assets/mascot_robot.png" alt="Cyberpunk Robot Mascot Head" width="160" /><br>
   <em>Vector-rendered Cyberpunk Mecha Skull Android with smooth gaze and mechanical blinks.</em>
 </p>
 
@@ -185,8 +204,8 @@
 #### Installation & Launch
 ```bash
 # Clone the repository
-git clone https://github.com/jonis210/sysnotch-dynamic-island.git
-cd sysnotch-dynamic-island
+git clone https://github.com/jonis210/sysNotch.git
+cd sysNotch
 
 # Install virtual environment and dependencies
 install.bat
