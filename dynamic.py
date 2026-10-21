@@ -784,7 +784,7 @@ class DesktopDynamicIsland(QWidget):
         )
         self.lyrics_expanded_w = min(
             float(self.canvas_w - 72.0),
-            640.0,
+            680.0,
         )
         self.lyrics_open = False
         self.expanded_h = 144.0
@@ -899,8 +899,6 @@ class DesktopDynamicIsland(QWidget):
         self.page_scroll_pos = 0.0
         self.page_scroll_vel = 0.0
         self.lyrics_smooth_index = 0.0
-        self.lyrics_anim_progress = 0.0
-        self.vel_lyrics_anim = 0.0
         self.click_through_active = False
         self.media_state = "connecting"
         self.has_media = False
@@ -1976,7 +1974,7 @@ class DesktopDynamicIsland(QWidget):
             prox_eased = prox ** 1.6
             weight = QFont.Weight.Bold if prox > 0.65 else (QFont.Weight.DemiBold if prox > 0.35 else QFont.Weight.Medium)
             font_family = "Segoe UI Symbol" if is_instrumental else "Segoe UI"
-            f_size = 11.0 if is_instrumental else 9.5
+            f_size = (11.0 + (3.0 * prox_eased)) if is_instrumental else (9.8 if prox > 0.65 else 8.8)
             font = _font(font_family, f_size, weight)
             fm = QFontMetricsF(font)
 
@@ -2633,8 +2631,36 @@ class DesktopDynamicIsland(QWidget):
         return max(420.0, min(max_w, desired_w))
 
     def _calculate_dynamic_lyrics_width(self, now: float = 0.0) -> float:
-        """Return stable lyrics expanded width for jitter-free animation."""
-        return getattr(self, "lyrics_expanded_w", 640.0)
+        """
+        Dynamically compute an aesthetic, well-proportioned island width for lyrics.
+        Enforces safe bounds (max 680px, strictly inside canvas bounds with >= 36px margin)
+        to guarantee that the concave Bezier ears and rounded bottom corners are never clipped into a box.
+        """
+        base_w = self.expanded_w
+        safe_canvas_max = float(self.canvas_w - 72.0)
+        max_total_w = min(680.0, safe_canvas_max)
+        max_panel_w = max(200.0, max_total_w - base_w - 16.0)
+
+        if self.lyrics_cues:
+            target_cue = bisect.bisect_right(
+                self.lyrics_timestamps, self.display_position_seconds(now)
+            ) - 1
+            target_cue = max(0, min(len(self.lyrics_cues) - 1, target_cue))
+            c_item = self.lyrics_cues[target_cue]
+            active_text = c_item[1].strip() if (isinstance(c_item, (list, tuple)) and len(c_item) > 1) else str(c_item).strip()
+
+            is_instrumental = not active_text or active_text in ("♪", "♫", "♩", "♪   ♪   ♪", "(instrumental)", "[instrumental]")
+            if is_instrumental:
+                active_w = 40.0
+            else:
+                lyric_font = _font("Segoe UI", 11.0, QFont.Weight.Bold)
+                active_w = QFontMetricsF(lyric_font).horizontalAdvance(active_text)
+        else:
+            active_w = 120.0
+
+        min_panel_w = min(220.0, max_panel_w)
+        panel_desired_w = max(min_panel_w, min(max_panel_w, active_w + 36.0))
+        return min(max_total_w, base_w + 16.0 + panel_desired_w)
 
     def _update_system_stats(self, now: float):
         if now - self._last_stats_time < 1.8:
@@ -3582,11 +3608,12 @@ class DesktopDynamicIsland(QWidget):
         center = rect.center()
         direction = 1.0 if forward else -1.0
 
-        # Rock-solid pill alignment with zero horizontal slide jitter
+        # Subtle slide-in micro-animation as opacity approaches 1.0
+        slide_offset = (1.0 - opacity) * (4.0 if forward else -4.0)
         pill_w = 16.0
         pill_h = 44.0
         pill_rect = QRectF(
-            center.x() - (pill_w / 2.0),
+            center.x() - (pill_w / 2.0) + slide_offset,
             center.y() - (pill_h / 2.0),
             pill_w,
             pill_h,
@@ -4045,7 +4072,7 @@ class DesktopDynamicIsland(QWidget):
             if self.settings_open or self.profile_editor_open:
                 target_w = self.expanded_w
             elif self.lyrics_open and self.island_page_index == 0 and self.is_spotify_active:
-                target_w = getattr(self, "lyrics_expanded_w", 640.0)
+                target_w = self._calculate_dynamic_lyrics_width(now)
             else:
                 target_w = self.expanded_w
         else:
