@@ -784,7 +784,7 @@ class DesktopDynamicIsland(QWidget):
         )
         self.lyrics_expanded_w = min(
             float(self.canvas_w - 72.0),
-            680.0,
+            640.0,
         )
         self.lyrics_open = False
         self.expanded_h = 144.0
@@ -1919,7 +1919,7 @@ class DesktopDynamicIsland(QWidget):
 
     def _paint_side_lyrics_panel(self, painter: QPainter, panel_rect: QRectF):
         """Draw Spotify-style synchronized lyrics spanning the full island height."""
-        if panel_rect.width() < 60.0 or panel_rect.height() < 40.0:
+        if panel_rect.width() < 2.0 or panel_rect.height() < 40.0:
             return
 
         panel_x = panel_rect.left()
@@ -1950,15 +1950,16 @@ class DesktopDynamicIsland(QWidget):
             painter.setFont(_font("Segoe UI", 9.0, QFont.Weight.Medium))
             painter.setPen(QColor("#778496"))
             elided = painter.fontMetrics().elidedText(
-                message, Qt.TextElideMode.ElideRight, max(1, int(panel_w - 20.0))
+                message, Qt.TextElideMode.ElideRight, max(1, int(max(panel_w, 200.0) - 20.0))
             )
-            painter.drawText(QRectF(panel_x, panel_y, panel_w, panel_h), Qt.AlignmentFlag.AlignCenter, elided)
+            painter.drawText(QRectF(panel_x, panel_y, max(panel_w, 200.0), panel_h), Qt.AlignmentFlag.AlignCenter, elided)
             painter.restore()
             return
 
         current_float = getattr(self, "lyrics_smooth_index", 0.0)
         center_y = panel_y + (panel_h / 2.0)
-        avail_w = max(10.0, panel_w - 20.0)
+        stable_w = max(panel_w, 218.0)
+        avail_w = max(10.0, stable_w - 20.0)
         spacing = 8.0
 
         min_idx = max(0, int(math.floor(current_float - 3.0)))
@@ -2631,37 +2632,9 @@ class DesktopDynamicIsland(QWidget):
         max_w = min(460.0, float(screen_w - 24))
         return max(420.0, min(max_w, desired_w))
 
-    def _calculate_dynamic_lyrics_width(self, now: float) -> float:
-        """
-        Dynamically compute an aesthetic, well-proportioned island width for lyrics.
-        Enforces safe bounds (max 680px, strictly inside canvas bounds with >= 36px margin)
-        to guarantee that the concave Bezier ears and rounded bottom corners are never clipped into a box.
-        """
-        base_w = self.expanded_w
-        safe_canvas_max = float(self.canvas_w - 72.0)
-        max_total_w = min(680.0, safe_canvas_max)
-        max_panel_w = max(200.0, max_total_w - base_w - 16.0)
-
-        if self.lyrics_cues:
-            target_cue = bisect.bisect_right(
-                self.lyrics_timestamps, self.display_position_seconds(now)
-            ) - 1
-            target_cue = max(0, min(len(self.lyrics_cues) - 1, target_cue))
-            c_item = self.lyrics_cues[target_cue]
-            active_text = c_item[1].strip() if (isinstance(c_item, (list, tuple)) and len(c_item) > 1) else str(c_item).strip()
-
-            is_instrumental = not active_text or active_text in ("♪", "♫", "♩", "♪   ♪   ♪", "(instrumental)", "[instrumental]")
-            if is_instrumental:
-                active_w = 40.0
-            else:
-                lyric_font = _font("Segoe UI", 11.0, QFont.Weight.Bold)
-                active_w = QFontMetricsF(lyric_font).horizontalAdvance(active_text)
-        else:
-            active_w = 120.0
-
-        min_panel_w = min(220.0, max_panel_w)
-        panel_desired_w = max(min_panel_w, min(max_panel_w, active_w + 36.0))
-        return min(max_total_w, base_w + 16.0 + panel_desired_w)
+    def _calculate_dynamic_lyrics_width(self, now: float = 0.0) -> float:
+        """Return stable lyrics expanded width for jitter-free animation."""
+        return getattr(self, "lyrics_expanded_w", 640.0)
 
     def _update_system_stats(self, now: float):
         if now - self._last_stats_time < 1.8:
@@ -2948,156 +2921,6 @@ class DesktopDynamicIsland(QWidget):
         screen_w = QApplication.primaryScreen().availableGeometry().width()
         max_w = min(460.0, float(screen_w - 24))
         return max(420.0, min(max_w, desired_w))
-
-    def _calculate_dynamic_lyrics_width(self, now: float) -> float:
-        """
-        Dynamically compute an aesthetic, well-proportioned island width for lyrics.
-        Enforces safe bounds (max 680px, strictly inside canvas bounds with >= 36px margin)
-        to guarantee that the concave Bezier ears and rounded bottom corners are never clipped into a box.
-        """
-        base_w = self.expanded_w
-        safe_canvas_max = float(self.canvas_w - 72.0)
-        max_total_w = min(680.0, safe_canvas_max)
-        max_panel_w = max(200.0, max_total_w - base_w - 16.0)
-
-        if self.lyrics_cues:
-            target_cue = bisect.bisect_right(
-                self.lyrics_timestamps, self.display_position_seconds(now)
-            ) - 1
-            target_cue = max(0, min(len(self.lyrics_cues) - 1, target_cue))
-            c_item = self.lyrics_cues[target_cue]
-            active_text = c_item[1].strip() if (isinstance(c_item, (list, tuple)) and len(c_item) > 1) else str(c_item).strip()
-
-            is_instrumental = not active_text or active_text in ("♪", "♫", "♩", "♪   ♪   ♪", "(instrumental)", "[instrumental]")
-            if is_instrumental:
-                active_w = 40.0
-            else:
-                lyric_font = _font("Segoe UI", 11.0, QFont.Weight.Bold)
-                active_w = QFontMetricsF(lyric_font).horizontalAdvance(active_text)
-        else:
-            active_w = 120.0
-
-        min_panel_w = min(220.0, max_panel_w)
-        panel_desired_w = max(min_panel_w, min(max_panel_w, active_w + 36.0))
-        return min(max_total_w, base_w + 16.0 + panel_desired_w)
-
-    def _update_system_stats(self, now: float):
-        if now - self._last_stats_time < 1.8:
-            return
-        # Never perform CPU/RAM measurements while the island is actively animating
-        if abs(self.vel_w) > 1.0 or abs(self.vel_h) > 1.0 or self.expand_progress < 0.95:
-            return
-        self._last_stats_time = now
-
-        try:
-            # 1. Battery (instant kernel call ~0.005ms)
-            pstat = SYSTEM_POWER_STATUS()
-            if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(pstat)):
-                self.system_battery_percent = int(pstat.BatteryLifePercent)
-                self.system_battery_charging = bool(pstat.BatteryFlag & 8) or bool(pstat.ACLineStatus == 1)
-
-            # 2. RAM (instant kernel call ~0.003ms)
-            mstat = MEMORYSTATUSEX()
-            mstat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(mstat)):
-                self.system_ram_percent = float(mstat.dwMemoryLoad)
-
-            # 3. CPU (instant kernel call ~0.002ms)
-            idle_ft = FILETIME()
-            kernel_ft = FILETIME()
-            user_ft = FILETIME()
-            if ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle_ft), ctypes.byref(kernel_ft), ctypes.byref(user_ft)):
-                i = (idle_ft.dwHighDateTime << 32) | idle_ft.dwLowDateTime
-                k = (kernel_ft.dwHighDateTime << 32) | kernel_ft.dwLowDateTime
-                u = (user_ft.dwHighDateTime << 32) | user_ft.dwLowDateTime
-                if self._prev_kernel_time > 0:
-                    d_idle = i - self._prev_idle_time
-                    d_total = (k - self._prev_kernel_time) + (u - self._prev_user_time)
-                    if d_total > 0:
-                        self.system_cpu_percent = max(0.0, min(100.0, (1.0 - (d_idle / d_total)) * 100.0))
-                self._prev_idle_time, self._prev_kernel_time, self._prev_user_time = i, k, u
-        except Exception:
-            pass
-
-    @staticmethod
-    def _query_network_io():
-        """Returns (bytes_sent, bytes_recv) using psutil with seamless fallback to Windows native GetIfTable."""
-        if psutil is not None:
-            try:
-                net = psutil.net_io_counters()
-                return net.bytes_sent, net.bytes_recv
-            except Exception:
-                pass
-        if sys.platform == "win32":
-            try:
-                buf_size = wintypes.DWORD(0)
-                ctypes.windll.iphlpapi.GetIfTable(None, ctypes.byref(buf_size), False)
-                if buf_size.value > 0:
-                    buf = ctypes.create_string_buffer(buf_size.value)
-                    if ctypes.windll.iphlpapi.GetIfTable(buf, ctypes.byref(buf_size), False) == 0:
-                        num = wintypes.DWORD.from_buffer_copy(buf[:4]).value
-                        row_size = ctypes.sizeof(MIB_IFROW)
-                        tot_in = 0
-                        tot_out = 0
-                        for i in range(num):
-                            row = MIB_IFROW.from_buffer_copy(buf[4 + i * row_size : 4 + (i + 1) * row_size])
-                            if row.dwType != 24:  # Exclude loopback
-                                tot_in += row.dwInOctets
-                                tot_out += row.dwOutOctets
-                        return tot_out, tot_in
-            except Exception:
-                pass
-        return 0, 0
-
-    def _start_network_speed_thread(self):
-        """Continuously measures real-time network upload and download throughput in a background thread."""
-        def _worker():
-            last_sent, last_recv = self._query_network_io()
-            last_time = time.perf_counter()
-
-            while not getattr(self, "_stop_background_threads", False):
-                try:
-                    time.sleep(0.5)
-                    now = time.perf_counter()
-                    dt = max(0.1, now - last_time)
-                    last_time = now
-
-                    curr_sent, curr_recv = self._query_network_io()
-                    if curr_sent >= last_sent and curr_recv >= last_recv:
-                        up_diff = curr_sent - last_sent
-                        down_diff = curr_recv - last_recv
-                    else:
-                        up_diff = max(0, curr_sent)
-                        down_diff = max(0, curr_recv)
-                    last_sent = curr_sent
-                    last_recv = curr_recv
-
-                    instant_up = up_diff / dt
-                    instant_down = down_diff / dt
-
-                    # Smooth responsive filter (70% current, 30% previous)
-                    self.net_upload_speed = (self.net_upload_speed * 0.3) + (instant_up * 0.7)
-                    self.net_download_speed = (self.net_download_speed * 0.3) + (instant_down * 0.7)
-                except Exception:
-                    time.sleep(0.5)
-
-        t = threading.Thread(target=_worker, daemon=True)
-        t.start()
-
-    @staticmethod
-    def _format_network_speed(bytes_per_sec: float) -> str:
-        if bytes_per_sec >= 1024 * 1024 * 100:
-            return f"{int(round(bytes_per_sec / (1024 * 1024)))} MB/s"
-        elif bytes_per_sec >= 1024 * 1024:
-            return f"{bytes_per_sec / (1024 * 1024):.1f} MB/s"
-        elif bytes_per_sec >= 100 * 1024:
-            return f"{int(round(bytes_per_sec / 1024))} KB/s"
-        elif bytes_per_sec >= 1024:
-            return f"{bytes_per_sec / 1024:.1f} KB/s"
-        elif bytes_per_sec >= 60:
-            return f"{bytes_per_sec / 1024:.1f} KB/s"
-        else:
-            return "0 KB/s"
 
     def _update_audio_reactive_spectrum(self, dt: float, now: float):
         num_cols = 17
@@ -4260,7 +4083,7 @@ class DesktopDynamicIsland(QWidget):
             if self.settings_open or self.profile_editor_open:
                 target_w = self.expanded_w
             elif self.lyrics_open and self.island_page_index == 0 and self.is_spotify_active:
-                target_w = self._calculate_dynamic_lyrics_width(now)
+                target_w = getattr(self, "lyrics_expanded_w", 640.0)
             else:
                 target_w = self.expanded_w
         else:
@@ -4533,8 +4356,6 @@ class DesktopDynamicIsland(QWidget):
             if button == "lyrics":
                 if self.is_spotify_active:
                     self.lyrics_open = not self.lyrics_open
-                    # Provide an immediate physical impulse so spring accelerates on frame 0
-                    self.vel_w = 220.0 if self.lyrics_open else -220.0
                     self.update()
                 event.accept()
                 return
@@ -5277,10 +5098,10 @@ class DesktopDynamicIsland(QWidget):
             btn_hit_h = 50.0
             btn_y = (h - btn_hit_h) / 2.0
             self.btn_tab_previous_rect = QRectF(x + 2.0, btn_y, btn_hit_w, btn_hit_h)
-            closed_next_x = x + w - 2.0 - btn_hit_w
             media_divider_x = media_left + media_w_area + 14.0
-            open_next_x = media_divider_x - (btn_hit_w / 2.0)
-            next_nav_x = (1.0 - lp) * closed_next_x + lp * open_next_x
+            # Monotonically anchored to media right edge to eliminate directional jerk/snap during lyrics open/close
+            next_nav_offset = (1.0 - lp) * (-10.0) + lp * 2.0
+            next_nav_x = media_left + media_w_area + next_nav_offset
             self.btn_tab_next_rect = QRectF(next_nav_x, btn_y, btn_hit_w, btn_hit_h)
 
             # 1. Top Notification & Status Bar (Battery, CPU, RAM, Wi-Fi, Bluetooth, Gradient Settings Gear)
@@ -5713,7 +5534,7 @@ class DesktopDynamicIsland(QWidget):
                 painter.drawLine(QPointF(divider_x, 34.0), QPointF(divider_x, h - 18.0))
 
                 lyr_x = divider_x + 16.0
-                lyr_w = max(20.0, (x + w) - lyr_x - margin)
+                lyr_w = max(0.0, (x + w) - lyr_x - margin)
                 self._paint_side_lyrics_panel(painter, QRectF(lyr_x, 0.0, lyr_w, h))
                 painter.restore()
 
