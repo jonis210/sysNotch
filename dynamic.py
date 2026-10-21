@@ -2885,43 +2885,6 @@ class DesktopDynamicIsland(QWidget):
         painter.setPen(QColor("#A78BFA"))
         painter.drawText(QRectF(speed_rect.left() + 60.0, top_y, 48.0, pill_h), Qt.AlignmentFlag.AlignCenter, f"↑ {up_text}")
 
-    def _calculate_base_media_width(self) -> float:
-        """Calculate the snug, content-hugging base width for the media player."""
-        fixed_overhead = 206.0  # margin(16) + art(46) + gap(10) + vis_gap(12) + trans/vis(106) + margin(16)
-        if self.has_media:
-
-            title_font = _font("Segoe UI", 11.0, QFont.Weight.Bold)
-            sub_font = _font("Segoe UI", 8.8, QFont.Weight.Medium)
-            title_w = QFontMetricsF(title_font).horizontalAdvance(self.track_title or "")
-
-            has_distinct_album = (
-                bool(self.track_album)
-                and self.track_album.strip()
-                and self.track_album.strip().lower() not in (
-                    (self.track_title or "").strip().lower(),
-                    (self.track_artist or "").strip().lower(),
-                    "unknown album",
-                    "single",
-                )
-            )
-            if self.track_artist and has_distinct_album:
-                subtitle = f"{self.track_artist} · {self.track_album}"
-            elif self.track_artist:
-                subtitle = self.track_artist
-            elif has_distinct_album:
-                subtitle = self.track_album
-            else:
-                subtitle = ""
-            sub_w = QFontMetricsF(sub_font).horizontalAdvance(subtitle) if subtitle else 0.0
-            content_text_w = max(title_w, sub_w)
-            desired_w = fixed_overhead + content_text_w
-        else:
-            desired_w = 420.0
-
-        screen_w = QApplication.primaryScreen().availableGeometry().width()
-        max_w = min(460.0, float(screen_w - 24))
-        return max(420.0, min(max_w, desired_w))
-
     def _update_audio_reactive_spectrum(self, dt: float, now: float):
         num_cols = 17
         max_rows = 11.0
@@ -3619,12 +3582,11 @@ class DesktopDynamicIsland(QWidget):
         center = rect.center()
         direction = 1.0 if forward else -1.0
 
-        # Subtle slide-in micro-animation as opacity approaches 1.0
-        slide_offset = (1.0 - opacity) * (4.0 if forward else -4.0)
+        # Rock-solid pill alignment with zero horizontal slide jitter
         pill_w = 16.0
         pill_h = 44.0
         pill_rect = QRectF(
-            center.x() - (pill_w / 2.0) + slide_offset,
+            center.x() - (pill_w / 2.0),
             center.y() - (pill_h / 2.0),
             pill_w,
             pill_h,
@@ -4111,10 +4073,10 @@ class DesktopDynamicIsland(QWidget):
                 self.cur_w += self.vel_w * sub_dt
                 self.cur_h += self.vel_h * sub_dt
 
-            # Crisp settling threshold: eliminates long sub-pixel crawl shimmer
-            if abs(target_w - self.cur_w) < 0.75 and abs(self.vel_w) < 14.0:
+            # Crisp settling threshold: smooth natural standstill with zero sub-pixel terminal snapping
+            if abs(target_w - self.cur_w) < 0.2 and abs(self.vel_w) < 2.5:
                 self.cur_w, self.vel_w = target_w, 0.0
-            if abs(target_h - self.cur_h) < 0.75 and abs(self.vel_h) < 14.0:
+            if abs(target_h - self.cur_h) < 0.2 and abs(self.vel_h) < 2.5:
                 self.cur_h, self.vel_h = target_h, 0.0
         else:
             self.cur_w, self.vel_w = target_w, 0.0
@@ -5100,9 +5062,9 @@ class DesktopDynamicIsland(QWidget):
             btn_y = (h - btn_hit_h) / 2.0
             self.btn_tab_previous_rect = QRectF(x + 2.0, btn_y, btn_hit_w, btn_hit_h)
             media_divider_x = media_left + media_w_area + 14.0
-            # Monotonically anchored to media right edge to eliminate directional jerk/snap during lyrics open/close
-            next_nav_offset = (1.0 - lp) * (-10.0) + lp * 2.0
-            next_nav_x = media_left + media_w_area + next_nav_offset
+            # Rock-solid locked anchoring to media player right boundary:
+            # 100% mirrors the left chevron symmetry and sits cleanly before the divider with exactly 0.0px drift during open/close
+            next_nav_x = media_left + media_w_area - 10.0
             self.btn_tab_next_rect = QRectF(next_nav_x, btn_y, btn_hit_w, btn_hit_h)
 
             # 1. Top Notification & Status Bar (Battery, CPU, RAM, Wi-Fi, Bluetooth, Gradient Settings Gear)

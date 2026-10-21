@@ -23,6 +23,7 @@ dist/
 # (Disarankan di-upload ke menu 'Releases' di GitHub agar repo tetap cepat saat di-clone)
 *.exe
 *.zip
+*.old.*
 
 # --- Diagnostic & Log Files ---
 *.log
