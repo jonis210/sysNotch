@@ -136,13 +136,16 @@ class TeleportServer:
 
     def stop(self):
         if self.server:
-            try:
-                self.server.shutdown()
-                self.server.server_close()
-            except Exception:
-                pass
+            srv = self.server
             self.server = None
             self.is_running = False
+            def _bg_shutdown():
+                try:
+                    srv.shutdown()
+                    srv.server_close()
+                except Exception:
+                    pass
+            threading.Thread(target=_bg_shutdown, daemon=True).start()
 
 
 class VaultItem:
@@ -227,7 +230,7 @@ class VaultItem:
             self.teleport_server.stop()
             self.teleport_server = None
             self.teleport_url = ""
-            self.teleport_qr = None
+            # Retain self.teleport_qr so UI exit fade/scale animations can render cleanly
         if self.temp_zip and os.path.exists(self.temp_zip):
             try:
                 os.remove(self.temp_zip)

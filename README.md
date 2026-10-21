@@ -11,7 +11,7 @@
 
 <p align="center">
   <strong>A fluid, ultra-lightweight Dynamic Island experience meticulously engineered for Windows 10 & 11.</strong><br>
-  Featuring native Windows Media Transport integration, real-time synchronized karaoke lyrics, interactive cyberpunk mecha mascot, browser-bridged YouTube ad skipping, and deep Win32 working-set RAM optimization.
+  Featuring native Windows Media Transport integration, real-time synchronized karaoke lyrics, interactive cyberpunk mecha mascot, drag-and-drop file shelf with instant LAN QR Teleport, browser-bridged YouTube ad skipping, and deep Win32 working-set RAM optimization.
 </p>
 
 <p align="center">
@@ -29,8 +29,18 @@
       Apple-grade curved bezier notch that smoothly transitions between a minimalist, distraction-free top camera notch and an expanded multi-panel media dashboard with physics-based spring easing.
     </td>
     <td width="50%">
+      <h3>📦 The Drop Vault & QR Teleport</h3>
+      Floating drag & drop file shelf right inside your notch. Instant zero-cloud local LAN streaming to phone/tablet via dynamically generated QR codes, multi-file ZIP bundling, and 1-click Cut/Copy actions.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
       <h3>🤖 Cyberpunk Mecha Mascot</h3>
       Procedural, mathematically-rendered skull android mascot with quintic smoothstep gaze tracking, organic floating bob, raised-cosine mechanical blinks, and dual-optic neon chromatic aberration.
+    </td>
+    <td width="50%">
+      <h3>📜 Synced Karaoke Lyrics</h3>
+      Integrated lyrics drawer powered by LRCLIB API. Real-time automatic line synchronization, 2-line auto-wrapping for long verses, dynamic width layout, and rigid body media player with zero jitter.
     </td>
   </tr>
   <tr>
@@ -39,18 +49,18 @@
       Aggressive memory optimization utilizing direct Win32 API <code>SetProcessWorkingSetSize</code> trimming, bounded LRU pixmap caching, and zero-allocation painting loops — sipping less memory than Notepad.
     </td>
     <td width="50%">
-      <h3>📜 Synced Karaoke Lyrics</h3>
-      Integrated lyrics drawer powered by LRCLIB API. Real-time automatic line synchronization, smooth scrolling focus, and expandable side-car drawer with zero lag.
+      <h3>🎵 Deep Windows Media Control</h3>
+      Direct Windows Runtime (WinRT) <code>GlobalSystemMediaTransportControls</code> bridge with native WASAPI master volume slider and dynamic animated vector speaker icon.
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <h3>🎵 Deep Windows Media Control</h3>
-      Direct Windows Runtime (WinRT) <code>GlobalSystemMediaTransportControls</code> bridge with native WASAPI master volume slider and dynamic animated vector speaker icon.
-    </td>
-    <td width="50%">
       <h3>⏭️ One-Click YouTube Skip Ad</h3>
       Native lightweight local bridge connecting to Chromium browser extension for zero-delay detection and click-triggering of YouTube's Skip Ad button.
+    </td>
+    <td width="50%">
+      <h3>✨ Morphing Indicator Physics</h3>
+      Continuous exponential physics engine smoothly morphing pagination dots into a horizontal scrollbar track when files overflow, and vice versa, with zero-delay daemon server shutdown.
     </td>
   </tr>
 </table>
@@ -85,13 +95,19 @@
 <img src="assets/v2_clean_lyrics.png" alt="SysNotch 2-Line Synced Lyrics" width="760" />
 <br/><br/>
 
-### 5. Obsidian Glass Theme & Gradient Settings
+### 5. The Drop Vault & QR Teleport (Page 2 File Shelf)
+*Drop zone container, micro action cards (Cut, QR, Delete), and instant local Wi-Fi QR Teleport modal.*  
+<br/>
+<img src="assets/drop_vault_showcase.png" alt="SysNotch Drop Vault Showcase" width="760" />
+<br/><br/>
+
+### 6. Obsidian Glass Theme & Gradient Settings
 *Inline gradient editor with 9 squircle color presets, live preview capsule, and hex code input.*  
 <br/>
 <img src="assets/clean_preview_settings.png" alt="SysNotch Theme Settings" width="540" />
 <br/><br/>
 
-### 6. Interactive Animated Speaker Icon
+### 7. Interactive Animated Speaker Icon
 *5 dynamic states (0% Mute ✕, Low, Mid, High, Pulse) reacting to master volume changes.*  
 <br/>
 <img src="assets/volume_speaker_states.png" alt="SysNotch Speaker States" width="680" />
@@ -103,12 +119,23 @@
 
 ## 🚀 Features in Detail
 
-### 1. 🎛️ Dynamic Multi-Tab Dashboard
-- **Page 1 — Media Hub:** Track title, artist, album thumbnail with ambient back-glow, interactive seek scrubber, audio frequency equalizer, and master volume controls.
-- **Page 2, 3, 4 — Extensible Modules:** Dynamic self-adjusting tab canvas height that matches content proportions seamlessly.
-- **Worm-Dot Page Indicator:** Elastic pagination dot that fluidly elongates into a pill during tab transitions before snapping into the target indicator.
+### 1. 📦 The Drop Vault & Instant QR Teleport (Page 2)
+- **Drag & Drop Staging Shelf:** Simply drag any file or folder from Windows Explorer into the notch. Notch fluidly expands and suspends files inside an Apple-grade dashed container box.
+- **Native Shell Icons & Thumbnails:** High-resolution Windows Shell icon provider with smooth photo thumbnail generation for image assets.
+- **Instant QR Teleport (Zero Cloud / Zero Cable):** Click the vector QR button on any card to launch a local embedded HTTP daemon. Scan with your phone or tablet camera to instantly download the file over local Wi-Fi at maximum LAN speed.
+- **Multi-File ZIP Packaging:** Dropping multiple files automatically bundles them into a fast streaming `.zip` on-the-fly.
+- **Frosted Glass Micro-Actions:** Translucent blur backgrounds for 1-Click Path Copy, Cut File (`Ctrl+X`), and Remove.
+- **Dedicated "✕ Hapus Semua" (Clear All):** Header network speed automatically transitions into a sleek clear button when items are present.
+- **Morphing Scroll Indicator:** Pagination dots seamlessly bloom and stretch into a horizontal scrollbar thumb pill via exponential physics (`scroll_indicator_t`) when items overflow.
+- **Non-Blocking Daemon Engine:** Closing the QR modal uses an asynchronous background thread (`_bg_shutdown`) with scale-down and crossfade exit animations, ensuring 0ms UI delay.
 
-### 2. 🤖 Interactive Mascot Companion
+### 2. 🎛️ Dynamic Multi-Tab Dashboard
+- **Page 1 — Media Hub:** Track title, artist, album thumbnail with ambient back-glow, interactive seek scrubber, audio frequency equalizer, and master volume controls.
+- **Page 2 — The Drop Vault:** File shelf, micro action cards, and LAN QR Teleport.
+- **Page 3 & 4 — Profile & Settings:** Minimalist identity hub and inline gradient theme editor.
+- **Worm-Dot Page Indicator:** Elastic pagination dot that fluidly elongates into a pill during tab transit before snapping into the target indicator.
+
+### 3. 🤖 Interactive Mascot Companion
 
 <p align="center">
   <img src="assets/mascot_robot.png" alt="Cyberpunk Robot Mascot Head" width="160" /><br>
@@ -120,12 +147,17 @@
 - High-definition ambient outer neon shield with dynamic breathing pulse.
 - Multi-resolution Windows application icon (`.ico`) compiled directly into the binary.
 
-### 3. 🎨 Visual Personalization
+### 4. 📜 Synced Karaoke Lyrics
+- **LRCLIB Integration:** Automatically fetches synchronized timecoded lyrics for any active song playing on Spotify, Apple Music, YouTube Music, or browsers.
+- **2-Line Intelligent Auto-Wrap:** Long verses automatically split into two balanced lines with dynamic width calculation, preventing any right-edge text clipping.
+- **Rigid-Body Layout:** Chevron navigation and media controls stay strictly locked to the media boundary during drawer expansion, preventing micro-shifts or visual jitter.
+
+### 5. 🎨 Visual Personalization
 - Live interactive gradient appearance customizer.
 - Preset cyber-palette or custom RGB hex input.
 - Real-time canvas preview with silky spring reveal animations.
 
-### 4. 🥷 Stealth & Efficiency Profile
+### 6. 🥷 Stealth & Efficiency Profile
 - Runs under the stealth process name `SysNotch.exe` in Windows Task Manager.
 - Clean system tray integration with instant hide/show toggles.
 - Background media threads throttle down to idle sleep cycles when no media is actively playing.
@@ -153,7 +185,7 @@
 #### Installation & Launch
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/sysnotch-dynamic-island.git
+git clone https://github.com/jonis210/sysnotch-dynamic-island.git
 cd sysnotch-dynamic-island
 
 # Install virtual environment and dependencies
@@ -225,7 +257,12 @@ The script will:
 | **Next / Previous Track** | Media arrow buttons |
 | **Toggle Lyrics Panel** | Click Lyrics button (`♫`) |
 | **Switch Tabs** | Click page dots or side chevrons (`‹` / `›`) |
-| **Volume Control** | Click `+` or `-` buttons |
+| **Drop File to Vault** | Drag file/folder from Explorer onto notch |
+| **Teleport File to Mobile** | Click QR code button (`📱`/`QR`) on item card |
+| **Cut File to Clipboard** | Click scissors button (`✂`) on item card |
+| **Pan File Shelf** | Click and drag horizontally across file shelf |
+| **Clear All Dropped Files** | Click **✕ Hapus Semua** in header |
+| **Volume Control** | Click `+` or `-` buttons or drag slider |
 | **Toggle Island Visibility** | Click tray icon or choose from tray menu |
 | **Exit Application** | Right-click tray icon ➔ **Keluar** |
 
@@ -234,14 +271,14 @@ The script will:
 ## 🏗️ Architecture & Tech Stack
 
 ```text
-┌──────────────────────────────────┐   ┌──────────────────────────────┐   ┌───────────────────────────┐
-│ Windows Media Transport (WinRT)  │   │  YouTube Browser Extension   │   │     LRCLIB Public API     │
-└────────────────┬─────────────────┘   └──────────────┬───────────────┘   └─────────────┬─────────────┘
-                 │ (SMTC Metadata)                    │ (Localhost:47863)               │ (Synced Lyrics)
-                 ▼                                    ▼                                 ▼
-       [ media_controller.py ]              [ youtube_bridge.py ]             [ lyrics_controller.py ]
-                 │                                    │                                 │
-                 └────────────────────────────┬───────┴─────────────────────────────────┘
+┌──────────────────────────────────┐   ┌──────────────────────────────┐   ┌───────────────────────────┐   ┌───────────────────────────┐
+│ Windows Media Transport (WinRT)  │   │  YouTube Browser Extension   │   │     LRCLIB Public API     │   │   Local Drop Vault & QR   │
+└────────────────┬─────────────────┘   └──────────────┬───────────────┘   └─────────────┬─────────────┘   └─────────────┬─────────────┘
+                 │ (SMTC Metadata)                    │ (Localhost:47863)               │ (Synced Lyrics)               │ (Local LAN HTTP / QR)
+                 ▼                                    ▼                                 ▼                               ▼
+       [ media_controller.py ]              [ youtube_bridge.py ]             [ lyrics_controller.py ]          [ drop_vault.py ]
+                 │                                    │                                 │                               │
+                 └────────────────────────────┬───────┴─────────────────────────────────┴───────────────────────────────┘
                                               ▼
                         ┌──────────────────────────────────────────┐
                         │     DesktopDynamicIsland Core Engine     │
@@ -257,6 +294,7 @@ The script will:
 
 - **GUI Framework:** PyQt6 (Direct Composition, native frameless layered window)
 - **Windows Media Core:** `winrt-Windows.Media.Control`, `winrt-Windows.Storage.Streams`
+- **File Transfer & Teleport:** Embedded Python `http.server` with non-blocking daemon thread + `qrcode` & `Pillow`
 - **Process Memory Management:** `ctypes.windll.kernel32.SetProcessWorkingSetSize`
 - **Lyrics Provider:** [LRCLIB](https://lrclib.net/)
 

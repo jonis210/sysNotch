@@ -1073,6 +1073,12 @@ class DesktopDynamicIsland(QWidget):
         self.pan_start_x = 0.0
         self.pan_start_scroll_x = 0.0
         self.vault_item_rects = []
+        self.vault_item_hover_anims = {}
+        self.vault_qr_modal_anim = 0.0
+        self.vault_qr_closing_item = None
+        self.vault_qr_closing_qr = None
+        self.scroll_indicator_t = 0.0
+        self.vault_scroll_track_rect = QRectF()
         self._tab_1_content_h = 168.0
         self.youtube_bridge.ad_state_changed.connect(self.on_youtube_ad_state)
         self.youtube_bridge.ad_state_stale_changed.connect(self.on_youtube_ad_state_stale)
@@ -1958,8 +1964,7 @@ class DesktopDynamicIsland(QWidget):
 
         current_float = getattr(self, "lyrics_smooth_index", 0.0)
         center_y = panel_y + (panel_h / 2.0)
-        stable_w = max(panel_w, 218.0)
-        avail_w = max(10.0, stable_w - 20.0)
+        avail_w = max(10.0, panel_w - 16.0)
         spacing = 8.0
 
         min_idx = max(0, int(math.floor(current_float - 3.0)))
@@ -2139,6 +2144,8 @@ class DesktopDynamicIsland(QWidget):
 
         # Hit testing for Tab 2 (The Drop Vault)
         if self.island_page_index == 1:
+            if getattr(self, "btn_vault_clear_all_rect", QRectF()).contains(local_pos):
+                return "vault_clear_all"
             if getattr(self, "btn_vault_qr_close_rect", QRectF()).contains(local_pos):
                 return "vault_qr_close"
             for entry in getattr(self, "vault_item_rects", []):
@@ -2865,25 +2872,46 @@ class DesktopDynamicIsland(QWidget):
             self.btn_profile_rect = QRectF()
             speed_anchor = self.btn_settings_rect.left()
 
-        # Network Speed Pill: [ ↓ 1.2 MB/s · ↑ 240 KB/s ]
-        up_text = self._format_network_speed(self.net_upload_speed)
-        down_text = self._format_network_speed(self.net_download_speed)
-        speed_w = 114.0
-        speed_rect = QRectF(speed_anchor - btn_gap - speed_w, top_y, speed_w, pill_h)
-        painter.setBrush(QBrush(QColor(255, 255, 255, 11)))
-        painter.setPen(QPen(QColor(255, 255, 255, 16), 0.8))
-        painter.drawRoundedRect(speed_rect, pill_r, pill_r)
+        # Network Speed Pill OR Clear All button (on page 2 with files)
+        vault_has_files = self.island_page_index == 1 and hasattr(self, "drop_vault") and len(self.drop_vault.items) > 0
+        vault_qr_showing = vault_has_files and (
+            bool(self.drop_vault.active_qr_item_id and self.drop_vault.get_item_by_id(self.drop_vault.active_qr_item_id))
+            or getattr(self, "vault_qr_modal_anim", 0.0) > 0.05
+        )
+        show_clear_all = vault_has_files and not vault_qr_showing
 
-        painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.Medium))
-        # Download (↓)
-        painter.setPen(QColor("#38BDF8"))
-        painter.drawText(QRectF(speed_rect.left() + 4.0, top_y, 48.0, pill_h), Qt.AlignmentFlag.AlignCenter, f"↓ {down_text}")
-        # Dot
-        painter.setPen(QColor(255, 255, 255, 40))
-        painter.drawText(QRectF(speed_rect.left() + 53.0, top_y, 6.0, pill_h), Qt.AlignmentFlag.AlignCenter, "·")
-        # Upload (↑)
-        painter.setPen(QColor("#A78BFA"))
-        painter.drawText(QRectF(speed_rect.left() + 60.0, top_y, 48.0, pill_h), Qt.AlignmentFlag.AlignCenter, f"↑ {up_text}")
+        if show_clear_all:
+            # "Hapus Semua" button replaces speed pill
+            clear_w = 92.0
+            clear_rect = QRectF(speed_anchor - btn_gap - clear_w, top_y, clear_w, pill_h)
+            self.btn_vault_clear_all_rect = clear_rect
+            clr_hvd = self.hovered_btn == "vault_clear_all"
+            painter.setBrush(QBrush(QColor(239, 68, 68, 35 if clr_hvd else 14)))
+            painter.setPen(QPen(QColor(239, 68, 68, 90 if clr_hvd else 45), 0.8))
+            painter.drawRoundedRect(clear_rect, 6.0, 6.0)
+            painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.DemiBold))
+            painter.setPen(QColor("#F87171" if clr_hvd else "#EF4444"))
+            painter.drawText(clear_rect, Qt.AlignmentFlag.AlignCenter, "✕ Hapus Semua")
+        else:
+            self.btn_vault_clear_all_rect = QRectF()
+            up_text = self._format_network_speed(self.net_upload_speed)
+            down_text = self._format_network_speed(self.net_download_speed)
+            speed_w = 114.0
+            speed_rect = QRectF(speed_anchor - btn_gap - speed_w, top_y, speed_w, pill_h)
+            painter.setBrush(QBrush(QColor(255, 255, 255, 11)))
+            painter.setPen(QPen(QColor(255, 255, 255, 16), 0.8))
+            painter.drawRoundedRect(speed_rect, pill_r, pill_r)
+
+            painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.Medium))
+            # Download (↓)
+            painter.setPen(QColor("#38BDF8"))
+            painter.drawText(QRectF(speed_rect.left() + 4.0, top_y, 48.0, pill_h), Qt.AlignmentFlag.AlignCenter, f"↓ {down_text}")
+            # Dot
+            painter.setPen(QColor(255, 255, 255, 40))
+            painter.drawText(QRectF(speed_rect.left() + 53.0, top_y, 6.0, pill_h), Qt.AlignmentFlag.AlignCenter, "·")
+            # Upload (↑)
+            painter.setPen(QColor("#A78BFA"))
+            painter.drawText(QRectF(speed_rect.left() + 60.0, top_y, 48.0, pill_h), Qt.AlignmentFlag.AlignCenter, f"↑ {up_text}")
 
     def _calculate_base_media_width(self) -> float:
         """Calculate the snug, content-hugging base width for the media player."""
@@ -3695,56 +3723,131 @@ class DesktopDynamicIsland(QWidget):
     def _paint_page_navigation(self, painter, indicator_y: float, center_x: float | None = None):
         self.tab_dots_rects = []
         dots_center_x = self.canvas_w / 2.0 if center_x is None else center_x
-        spacing = 14.0
-        total_width = (self.total_pages - 1) * spacing
-        start_x = dots_center_x - (total_width / 2.0)
+        t = getattr(self, "scroll_indicator_t", 0.0)
 
-        # 1. Background inactive dots
-        for index in range(self.total_pages):
-            dot_x = start_x + (index * spacing)
-            hit_rect = QRectF(dot_x - 7.0, indicator_y - 7.0, 14.0, 14.0)
-            self.tab_dots_rects.append(hit_rect)
+        # -----------------------------------------------------------------
+        # LAYER A: PAGINATION DOTS (Fades & subtly scales out as t -> 1.0)
+        # -----------------------------------------------------------------
+        if t < 0.995:
+            painter.save()
+            dots_opacity = max(0.0, 1.0 - t)
+            painter.setOpacity(painter.opacity() * dots_opacity)
+
+            # Apple-style subtle contraction scale as dots fade out (1.0 -> 0.78)
+            dots_scale = 1.0 - (0.22 * t)
+            painter.translate(dots_center_x, indicator_y)
+            painter.scale(dots_scale, dots_scale)
+            painter.translate(-dots_center_x, -indicator_y)
+
+            spacing = 14.0
+            total_width = (self.total_pages - 1) * spacing
+            start_x = dots_center_x - (total_width / 2.0)
+
+            # 1. Background inactive dots
+            for index in range(self.total_pages):
+                dot_x = start_x + (index * spacing)
+                hit_rect = QRectF(dot_x - 7.0, indicator_y - 7.0, 14.0, 14.0)
+                if t < 0.5:
+                    self.tab_dots_rects.append(hit_rect)
+
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(QColor(140, 155, 180, 80)))
+                painter.drawEllipse(QPointF(dot_x, indicator_y), 2.2, 2.2)
+
+            # 2. Dynamic Worm / Elastic Stretch active mint indicator (Apple iOS Worm design)
+            r = 2.5
+            p_clamped = max(0.0, min(float(self.total_pages - 1), self.page_scroll_pos))
+            i = int(math.floor(p_clamped))
+            f = max(0.0, min(1.0, p_clamped - i))
+            if i >= self.total_pages - 1:
+                i = self.total_pages - 1
+                f = 0.0
+
+            if f <= 0.5:
+                head_t = math.sin((f / 0.5) * (math.pi / 2.0))
+                tail_t = 0.0
+            else:
+                head_t = 1.0
+                tail_t = 1.0 - math.cos(((f - 0.5) / 0.5) * (math.pi / 2.0))
+
+            x_i = start_x + (i * spacing)
+            head_x = x_i + (head_t * spacing)
+            tail_x = x_i + (tail_t * spacing)
+            left = tail_x - r
+            right = head_x + r
+            width = max(r * 2.0, right - left)
+
+            worm_rect = QRectF(left, indicator_y - r, width, r * 2.0)
+            glow_pad = 2.0
+            glow_rect = QRectF(left - glow_pad, indicator_y - r - glow_pad, width + 2.0 * glow_pad, (r + glow_pad) * 2.0)
 
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(QColor(140, 155, 180, 80)))
-            painter.drawEllipse(QPointF(dot_x, indicator_y), 2.2, 2.2)
+            # Soft ambient glow aura that follows the stretching worm shape
+            painter.setBrush(QBrush(QColor(167, 243, 208, 38)))
+            painter.drawRoundedRect(glow_rect, r + glow_pad, r + glow_pad)
+            # Active mint worm / dot (pure round dot at rest, liquid stretch during transit)
+            painter.setBrush(QBrush(QColor("#A7F3D0")))
+            painter.drawRoundedRect(worm_rect, r, r)
 
-        # 2. Dynamic Worm / Elastic Stretch active mint indicator (Apple iOS Worm design)
-        # At rest (page is an integer): 100% pure circle dot (diameter 5.0px, radius 2.5px)
-        # In transit: stretches into a smooth elongated capsule bridging the dots, then contracts back to a dot
-        r = 2.5
-        p_clamped = max(0.0, min(float(self.total_pages - 1), self.page_scroll_pos))
-        i = int(math.floor(p_clamped))
-        f = max(0.0, min(1.0, p_clamped - i))
-        if i >= self.total_pages - 1:
-            i = self.total_pages - 1
-            f = 0.0
+            painter.restore()
 
-        if f <= 0.5:
-            head_t = math.sin((f / 0.5) * (math.pi / 2.0))
-            tail_t = 0.0
+        # -----------------------------------------------------------------
+        # LAYER B: HORIZONTAL SCROLLBAR (Blooms, expands & fades in as t -> 1.0)
+        # -----------------------------------------------------------------
+        if t > 0.005:
+            painter.save()
+            scroll_opacity = max(0.0, min(1.0, t))
+            painter.setOpacity(painter.opacity() * scroll_opacity)
+
+            # Apple spring scale (0.82 -> 1.0) centered on track
+            scroll_scale = 0.82 + (0.18 * t)
+            painter.translate(dots_center_x, indicator_y)
+            painter.scale(scroll_scale, scroll_scale)
+            painter.translate(-dots_center_x, -indicator_y)
+
+            # Morphing track geometry: width expands smoothly from 32px to 54px
+            track_w = 32.0 + (22.0 * t)
+            track_h = 3.2
+            track_x = dots_center_x - (track_w / 2.0)
+            track_y = indicator_y - (track_h / 2.0)
+
+            if t >= 0.5:
+                self.vault_scroll_track_rect = QRectF(track_x - 6.0, track_y - 6.0, track_w + 12.0, track_h + 12.0)
+            else:
+                self.vault_scroll_track_rect = QRectF()
+
+            painter.setPen(Qt.PenStyle.NoPen)
+            # Track background (frosted subtle capsule)
+            painter.setBrush(QBrush(QColor(255, 255, 255, 30)))
+            painter.drawRoundedRect(QRectF(track_x, track_y, track_w, track_h), 1.6, 1.6)
+
+            # Active thumb pill calculation
+            margin = 14.0
+            content_w = min(self.expanded_w, self.cur_w) - (margin * 2.0)
+            inner_w = max(1.0, content_w - 20.0)
+            total_items = len(self.drop_vault.items) if hasattr(self, "drop_vault") else 0
+            item_w = 82.0
+            item_gap = 12.0
+            total_w = max(1.0, (total_items * (item_w + item_gap)) - item_gap)
+            max_scroll = max(0.0, total_w - inner_w)
+
+            visible_ratio = min(1.0, max(0.18, inner_w / total_w))
+            full_thumb_w = max(16.0, track_w * visible_ratio)
+            # Morphing thumb width: starts smaller and expands into full thumb width
+            thumb_w = max(8.0, 8.0 + ((full_thumb_w - 8.0) * t))
+
+            scroll_ratio = min(1.0, max(0.0, getattr(self, "vault_scroll_x", 0.0) / max(1.0, max_scroll))) if max_scroll > 0.0 else 0.0
+            thumb_x = track_x + (scroll_ratio * (track_w - thumb_w))
+
+            # Cyan vibrant thumb with slight ambient glow
+            painter.setBrush(QBrush(QColor(56, 189, 248, 50)))
+            painter.drawRoundedRect(QRectF(thumb_x - 1.0, track_y - 1.0, thumb_w + 2.0, track_h + 2.0), 2.2, 2.2)
+            painter.setBrush(QBrush(QColor("#38BDF8")))
+            painter.drawRoundedRect(QRectF(thumb_x, track_y, thumb_w, track_h), 1.6, 1.6)
+
+            painter.restore()
         else:
-            head_t = 1.0
-            tail_t = 1.0 - math.cos(((f - 0.5) / 0.5) * (math.pi / 2.0))
-
-        x_i = start_x + (i * spacing)
-        head_x = x_i + (head_t * spacing)
-        tail_x = x_i + (tail_t * spacing)
-        left = tail_x - r
-        right = head_x + r
-        width = max(r * 2.0, right - left)
-
-        worm_rect = QRectF(left, indicator_y - r, width, r * 2.0)
-        glow_pad = 2.0
-        glow_rect = QRectF(left - glow_pad, indicator_y - r - glow_pad, width + 2.0 * glow_pad, (r + glow_pad) * 2.0)
-
-        painter.setPen(Qt.PenStyle.NoPen)
-        # Soft ambient glow aura that follows the stretching worm shape
-        painter.setBrush(QBrush(QColor(167, 243, 208, 38)))
-        painter.drawRoundedRect(glow_rect, r + glow_pad, r + glow_pad)
-        # Active mint worm / dot (pure round dot at rest, liquid stretch during transit)
-        painter.setBrush(QBrush(QColor("#A7F3D0")))
-        painter.drawRoundedRect(worm_rect, r, r)
+            self.vault_scroll_track_rect = QRectF()
 
     @staticmethod
     def _draw_settings_icon(painter, rect: QRectF, color: QColor):
@@ -4169,7 +4272,8 @@ class DesktopDynamicIsland(QWidget):
         button_names = (
             "profile_edit", "profile_cancel", "profile_reset", "profile_save",
             "settings", "settings_cancel", "settings_reset", "settings_save",
-            "lyrics", "speaker_mute", "volume_slider", "volume_down", "volume_up", "prev", "play", "next", "skip_ad"
+            "lyrics", "speaker_mute", "volume_slider", "volume_down", "volume_up", "prev", "play", "next", "skip_ad",
+            "vault_qr_close", "vault_clear_all"
         )
         if getattr(self, "volume_pulse", 0.0) > 0.001:
             self.volume_pulse = max(0.0, self.volume_pulse - dt * 2.5)
@@ -4179,6 +4283,49 @@ class DesktopDynamicIsland(QWidget):
             if target > 0.0 or cur > 0.001:
                 new_val = cur + (target - cur) * decay_hover
                 self.btn_hover_anim[key] = 0.0 if (target == 0.0 and new_val < 0.002) else new_val
+
+        # Drive vault item hover animations & QR modal fade/scale animation
+        vault_active_qr = hasattr(self, "drop_vault") and bool(self.drop_vault.active_qr_item_id and self.drop_vault.get_item_by_id(self.drop_vault.active_qr_item_id))
+        target_qr_anim = 1.0 if vault_active_qr else 0.0
+        decay_qr = 1.0 - math.exp(-24.0 * dt)
+        self.vault_qr_modal_anim += (target_qr_anim - self.vault_qr_modal_anim) * decay_qr
+        if not vault_active_qr and self.vault_qr_modal_anim < 0.002:
+            self.vault_qr_modal_anim = 0.0
+            self.vault_qr_closing_item = None
+            self.vault_qr_closing_qr = None
+
+        # Drive smooth morph between pagination dots and vault horizontal scrollbar
+        vault_overflows = False
+        if hasattr(self, "drop_vault") and len(self.drop_vault.items) > 0:
+            margin = 14.0
+            content_w = min(self.expanded_w, self.cur_w) - (margin * 2.0)
+            inner_w = content_w - 20.0
+            total_items = len(self.drop_vault.items)
+            item_w = 82.0
+            item_gap = 12.0
+            total_w = (total_items * (item_w + item_gap)) - item_gap
+            vault_overflows = (total_w - inner_w) > 0.0
+
+        vault_qr_showing = (
+            hasattr(self, "drop_vault")
+            and bool(self.drop_vault.active_qr_item_id and self.drop_vault.get_item_by_id(self.drop_vault.active_qr_item_id))
+        ) or getattr(self, "vault_qr_modal_anim", 0.0) > 0.05
+
+        wants_scroll_indicator = (self.island_page_index == 1) and vault_overflows and (not vault_qr_showing)
+        target_indicator_t = 1.0 if wants_scroll_indicator else 0.0
+        decay_indicator = 1.0 - math.exp(-20.0 * dt)
+        self.scroll_indicator_t += (target_indicator_t - self.scroll_indicator_t) * decay_indicator
+        if abs(target_indicator_t - self.scroll_indicator_t) < 0.002:
+            self.scroll_indicator_t = target_indicator_t
+
+        if hasattr(self, "drop_vault"):
+            for item in self.drop_vault.items:
+                h_key = f"vault_card:{item.id}"
+                target_h = 1.0 if (self.hovered_btn == h_key or (self.hovered_btn and self.hovered_btn.endswith(f":{item.id}"))) else 0.0
+                cur_h = self.vault_item_hover_anims.get(item.id, 0.0)
+                if target_h > 0.0 or cur_h > 0.001:
+                    new_h = cur_h + (target_h - cur_h) * decay_hover
+                    self.vault_item_hover_anims[item.id] = 0.0 if (target_h == 0.0 and new_h < 0.002) else new_h
 
         # Drive smooth lyrics scrolling with continuous decay
         if self.lyrics_cues:
@@ -4217,6 +4364,8 @@ class DesktopDynamicIsland(QWidget):
             or getattr(self, "volume_pulse", 0.0) > 0.005
             or (self.lyrics_open and self.lyrics_anim_progress < 0.99)
             or (not self.lyrics_open and self.lyrics_anim_progress > 0.01)
+            or abs(target_qr_anim - getattr(self, "vault_qr_modal_anim", 0.0)) > 0.005
+            or abs(target_indicator_t - getattr(self, "scroll_indicator_t", 0.0)) > 0.005
         )
         is_audio_active = self.is_playing or getattr(self, "_system_audio_active", False)
         is_hover_active = (
@@ -4301,7 +4450,23 @@ class DesktopDynamicIsland(QWidget):
                 event.accept()
                 return
             # The Drop Vault button actions
+            if button == "vault_clear_all":
+                if hasattr(self, "drop_vault"):
+                    if self.drop_vault.active_qr_item_id:
+                        cur_qr_it = self.drop_vault.get_item_by_id(self.drop_vault.active_qr_item_id)
+                        if cur_qr_it:
+                            self.vault_qr_closing_item = cur_qr_it
+                            self.vault_qr_closing_qr = getattr(cur_qr_it, "teleport_qr", None)
+                    self.drop_vault.clear_all()
+                self.update()
+                event.accept()
+                return
             if button == "vault_qr_close":
+                if hasattr(self, "drop_vault") and self.drop_vault.active_qr_item_id:
+                    cur_qr_it = self.drop_vault.get_item_by_id(self.drop_vault.active_qr_item_id)
+                    if cur_qr_it:
+                        self.vault_qr_closing_item = cur_qr_it
+                        self.vault_qr_closing_qr = getattr(cur_qr_it, "teleport_qr", None)
                 self.drop_vault.stop_all_teleports()
                 self.update()
                 event.accept()
@@ -4314,12 +4479,22 @@ class DesktopDynamicIsland(QWidget):
                 return
             if button and button.startswith("vault_qr:"):
                 item_id = button.removeprefix("vault_qr:")
+                if hasattr(self, "drop_vault") and self.drop_vault.active_qr_item_id == item_id:
+                    cur_qr_it = self.drop_vault.get_item_by_id(item_id)
+                    if cur_qr_it:
+                        self.vault_qr_closing_item = cur_qr_it
+                        self.vault_qr_closing_qr = getattr(cur_qr_it, "teleport_qr", None)
                 self.drop_vault.toggle_teleport(item_id)
                 self.update()
                 event.accept()
                 return
             if button and button.startswith("vault_remove:"):
                 item_id = button.removeprefix("vault_remove:")
+                if hasattr(self, "drop_vault") and self.drop_vault.active_qr_item_id == item_id:
+                    cur_qr_it = self.drop_vault.get_item_by_id(item_id)
+                    if cur_qr_it:
+                        self.vault_qr_closing_item = cur_qr_it
+                        self.vault_qr_closing_qr = getattr(cur_qr_it, "teleport_qr", None)
                 self.drop_vault.remove_item(item_id)
                 self.update()
                 event.accept()
@@ -4633,52 +4808,19 @@ class DesktopDynamicIsland(QWidget):
         shelf_y = 42.0
         shelf_h = min(106.0, max(80.0, h - shelf_y - 18.0))
 
-        # Check if QR Teleport modal is active
+        # Check if QR Teleport modal is active or exiting
         active_qr_id = self.drop_vault.active_qr_item_id
         active_item = self.drop_vault.get_item_by_id(active_qr_id) if active_qr_id else None
+        modal_item = active_item or getattr(self, "vault_qr_closing_item", None)
+        modal_anim = getattr(self, "vault_qr_modal_anim", 0.0)
 
-        if active_item and active_item.teleport_qr:
-            # --- MODAL: QR TELEPORT OVERLAY ---
-            modal_rect = QRectF(content_x, 34.0, content_w, 108.0)
-            painter.setBrush(QBrush(QColor(18, 24, 38, 245)))
-            painter.setPen(QPen(QColor(56, 189, 248, 90), 1.0))
-            painter.drawRoundedRect(modal_rect, 12.0, 12.0)
+        # 1. RENDER DROP VAULT SHELF (Fades in/out smoothly inverse to QR modal)
+        shelf_opacity = 1.0 - modal_anim
+        if shelf_opacity > 0.005:
+            painter.save()
+            painter.setOpacity(painter.opacity() * shelf_opacity)
 
-            qr_side = min(68.0, modal_rect.height() - 14.0)
-            qr_bg = QRectF(modal_rect.left() + 8.0, modal_rect.top() + (modal_rect.height() - qr_side)/2.0, qr_side, qr_side)
-            painter.setBrush(QBrush(QColor("#FFFFFF")))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRoundedRect(qr_bg, 7.0, 7.0)
-            painter.drawPixmap(int(qr_bg.left() + 2), int(qr_bg.top() + 2), int(qr_side - 4), int(qr_side - 4), active_item.teleport_qr)
-
-            text_x = qr_bg.right() + 10.0
-            avail_tw = modal_rect.right() - text_x - 56.0
-            painter.setFont(_font("Segoe UI", 8.6, QFont.Weight.Bold))
-            painter.setPen(QColor("#38BDF8"))
-            painter.drawText(QRectF(text_x, modal_rect.top() + 8.0, avail_tw, 16.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "📱 Teleport ke HP")
-
-            painter.setFont(_font("Segoe UI", 7.4, QFont.Weight.Medium))
-            painter.setPen(QColor("#CBD5E1"))
-            elided_desc = QFontMetricsF(painter.font()).elidedText(f"Scan kamera HP: {active_item.name}", Qt.TextElideMode.ElideMiddle, avail_tw)
-            painter.drawText(QRectF(text_x, modal_rect.top() + 25.0, avail_tw, 15.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_desc)
-
-            painter.setFont(_font("Consolas", 6.8, QFont.Weight.Normal))
-            painter.setPen(QColor("#64748B"))
-            elided_url = QFontMetricsF(painter.font()).elidedText(active_item.teleport_url, Qt.TextElideMode.ElideMiddle, avail_tw)
-            painter.drawText(QRectF(text_x, modal_rect.top() + 41.0, avail_tw, 14.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_url)
-
-            # Close button
-            self.btn_vault_qr_close_rect = QRectF(modal_rect.right() - 52.0, modal_rect.top() + (modal_rect.height() - 24.0)/2.0, 46.0, 24.0)
-            c_hvd = self.hovered_btn == "vault_qr_close"
-            painter.setBrush(QBrush(QColor(255, 255, 255, 22 if c_hvd else 14)))
-            painter.setPen(QPen(QColor(255, 255, 255, 35 if c_hvd else 20), 0.8))
-            painter.drawRoundedRect(self.btn_vault_qr_close_rect, 6.0, 6.0)
-            painter.setFont(_font("Segoe UI", 7.4, QFont.Weight.Medium))
-            painter.setPen(QColor("#FFFFFF" if c_hvd else "#94A3B8"))
-            painter.drawText(self.btn_vault_qr_close_rect, Qt.AlignmentFlag.AlignCenter, "✕ Tutup")
-
-        elif len(self.drop_vault.items) == 0:
-            # --- EMPTY VAULT: CLEAN DASHED DROP ZONE ---
+            # --- THE DROP VAULT CONTAINER BOX (ALWAYS PRESERVED) ---
             drop_rect = QRectF(content_x, 36.0, content_w, 102.0)
             is_active_drop = getattr(self, "is_drag_hovered", False)
 
@@ -4688,218 +4830,310 @@ class DesktopDynamicIsland(QWidget):
             painter.setBrush(QBrush(QColor(56, 189, 248, 20 if is_active_drop else 5)))
             painter.drawRoundedRect(drop_rect, 12.0, 12.0)
 
-            icon_cx = drop_rect.center().x()
-            icon_cy = drop_rect.top() + (drop_rect.height() * 0.36)
+            if len(self.drop_vault.items) == 0:
+                # --- EMPTY STATE: Show icon & texts ---
+                icon_cx = drop_rect.center().x()
+                icon_cy = drop_rect.top() + (drop_rect.height() * 0.36)
 
-            # Suction tray
-            painter.setPen(QPen(QColor("#38BDF8"), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-            tray = QPainterPath()
-            tray.moveTo(icon_cx - 9.0, icon_cy + 1.0)
-            tray.lineTo(icon_cx - 9.0, icon_cy + 6.0)
-            tray.lineTo(icon_cx + 9.0, icon_cy + 6.0)
-            tray.lineTo(icon_cx + 9.0, icon_cy + 1.0)
-            painter.drawPath(tray)
+                # Suction tray
+                painter.setPen(QPen(QColor("#38BDF8"), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                tray = QPainterPath()
+                tray.moveTo(icon_cx - 9.0, icon_cy + 1.0)
+                tray.lineTo(icon_cx - 9.0, icon_cy + 6.0)
+                tray.lineTo(icon_cx + 9.0, icon_cy + 6.0)
+                tray.lineTo(icon_cx + 9.0, icon_cy + 1.0)
+                painter.drawPath(tray)
 
-            # Downward arrow
-            arrow = QPainterPath()
-            arrow.moveTo(icon_cx, icon_cy - 7.0)
-            arrow.lineTo(icon_cx, icon_cy + 2.0)
-            arrow.moveTo(icon_cx - 3.5, icon_cy - 1.5)
-            arrow.lineTo(icon_cx, icon_cy + 2.0)
-            arrow.lineTo(icon_cx + 3.5, icon_cy - 1.5)
-            painter.drawPath(arrow)
+                # Downward arrow
+                arrow = QPainterPath()
+                arrow.moveTo(icon_cx, icon_cy - 7.0)
+                arrow.lineTo(icon_cx, icon_cy + 2.0)
+                arrow.moveTo(icon_cx - 3.5, icon_cy - 1.5)
+                arrow.lineTo(icon_cx, icon_cy + 2.0)
+                arrow.lineTo(icon_cx + 3.5, icon_cy - 1.5)
+                painter.drawPath(arrow)
 
-            # Labels
-            painter.setFont(_font("Segoe UI", 8.6, QFont.Weight.DemiBold))
-            painter.setPen(QColor("#38BDF8" if is_active_drop else "#E2E8F0"))
-            label_text = "LEPASKAN UNTUK MENGGANTUNG FILE" if is_active_drop else "Tarik & Lepas File ke Sini"
-            painter.drawText(QRectF(content_x, icon_cy + 11.0, content_w, 16.0), Qt.AlignmentFlag.AlignCenter, label_text)
+                # Labels
+                painter.setFont(_font("Segoe UI", 9.0, QFont.Weight.Bold))
+                painter.setPen(QColor("#38BDF8" if is_active_drop else "#FFFFFF"))
+                label_text = "LEPASKAN UNTUK MENGGANTUNG FILE" if is_active_drop else "Tarik & Lepas File ke Sini"
+                painter.drawText(QRectF(content_x, icon_cy + 11.0, content_w, 16.0), Qt.AlignmentFlag.AlignCenter, label_text)
 
-            painter.setFont(_font("Segoe UI", 7.0, QFont.Weight.Normal))
-            painter.setPen(QColor("#94A3B8" if is_active_drop else "#64748B"))
-            painter.drawText(QRectF(content_x, icon_cy + 27.0, content_w, 14.0), Qt.AlignmentFlag.AlignCenter, "QR Teleport ke HP • 1-Klik Cut • Drag-Out ke Mana Saja")
+                painter.setFont(_font("Segoe UI", 7.4, QFont.Weight.Medium))
+                painter.setPen(QColor("#7DD3FC" if is_active_drop else "#CBD5E1"))
+                painter.drawText(QRectF(content_x, icon_cy + 28.0, content_w, 14.0), Qt.AlignmentFlag.AlignCenter, "QR Teleport ke HP • 1-Klik Cut • Drag-Out ke Mana Saja")
 
-        else:
-            # --- POPULATED VAULT: BORDERLESS FULL ICONS + TRANSFORM HOVER ---
-            item_w = 82.0
-            item_gap = 14.0
-            total_items = len(self.drop_vault.items)
-            total_w = (total_items * (item_w + item_gap)) - item_gap
-            max_scroll = max(0.0, total_w - content_w)
-            self.vault_scroll_x = max(0.0, min(max_scroll, getattr(self, "vault_scroll_x", 0.0)))
+            else:
+                # --- POPULATED STATE: Render files inside the box, text is hidden ---
+                item_w = 82.0
+                item_gap = 12.0
+                total_items = len(self.drop_vault.items)
+                total_w = (total_items * (item_w + item_gap)) - item_gap
+                inner_w = drop_rect.width() - 20.0
+                max_scroll = max(0.0, total_w - inner_w)
+                self.vault_scroll_x = max(0.0, min(max_scroll, getattr(self, "vault_scroll_x", 0.0)))
 
-            shelf_clip_rect = QRectF(content_x, 36.0, content_w, 102.0)
-            painter.save()
-            painter.setClipRect(shelf_clip_rect)
+                shelf_clip_rect = drop_rect.adjusted(2.0, 2.0, -2.0, -2.0)
+                painter.save()
+                painter.setClipRect(shelf_clip_rect)
 
-            cat_colors = {
-                "code": QColor("#0284C7"),
-                "doc": QColor("#3B82F6"),
-                "image": QColor("#A78BFA"),
-                "video": QColor("#F472B6"),
-                "audio": QColor("#34D399"),
-                "archive": QColor("#F59E0B"),
-            }
+                cat_colors = {
+                    "code": QColor("#0284C7"),
+                    "doc": QColor("#3B82F6"),
+                    "image": QColor("#A78BFA"),
+                    "video": QColor("#F472B6"),
+                    "audio": QColor("#34D399"),
+                    "archive": QColor("#F59E0B"),
+                }
 
-            for idx, item in enumerate(self.drop_vault.items):
-                ix = content_x + (idx * (item_w + item_gap)) - self.vault_scroll_x
-                # Culling offscreen items
-                if ix + item_w < content_x - 50.0 or ix > content_x + content_w + 50.0:
-                    continue
+                start_x = drop_rect.left() + 10.0
+                for idx, item in enumerate(self.drop_vault.items):
+                    ix = start_x + (idx * (item_w + item_gap)) - self.vault_scroll_x
+                    # Culling offscreen items
+                    if ix + item_w < content_x - 50.0 or ix > content_x + content_w + 50.0:
+                        continue
 
-                icon_size = 56.0
-                icon_x = ix + (item_w - icon_size) / 2.0
-                icon_y = shelf_y
-                icon_rect = QRectF(icon_x, icon_y, icon_size, icon_size)
+                    item_anim = self.vault_item_hover_anims.get(item.id, 0.0)
+                    lift = item_anim * 3.0
 
-                bottom_y = 104.0
-                bottom_h = 32.0
-                bottom_rect = QRectF(ix, bottom_y, item_w, bottom_h)
-                item_full_rect = icon_rect | bottom_rect
+                    icon_size = 56.0
+                    icon_x = ix + (item_w - icon_size) / 2.0
+                    icon_y = shelf_y - lift
+                    icon_rect = QRectF(icon_x, icon_y, icon_size, icon_size)
 
-                # Detect if hovered
-                is_hovered = (self.hovered_btn == f"vault_card:{item.id}" or 
-                              (self.hovered_btn and self.hovered_btn.endswith(f":{item.id}")))
+                    bottom_y = 104.0 - lift
+                    bottom_h = 32.0
+                    bottom_rect = QRectF(ix, bottom_y, item_w, bottom_h)
+                    item_full_rect = icon_rect | bottom_rect
 
-                # 1. FULL Icon rendering (Real system shell icon, image thumbnail, zip zipper, or folder)
-                if item.thumbnail and not item.thumbnail.isNull():
-                    thumb_path = QPainterPath()
-                    thumb_path.addRoundedRect(icon_rect, 13.0, 13.0)
-                    painter.save()
-                    painter.setClipPath(thumb_path)
-                    painter.drawPixmap(int(icon_x), int(icon_y), int(icon_size), int(icon_size), item.thumbnail)
-                    painter.restore()
-                    painter.setPen(QPen(QColor(255, 255, 255, 35), 0.8))
-                    painter.setBrush(Qt.BrushStyle.NoBrush)
-                    painter.drawRoundedRect(icon_rect, 13.0, 13.0)
-                elif getattr(item, "is_dir", False) or item.category == "folder":
-                    if getattr(item, "system_icon", None) and not item.system_icon.isNull():
-                        painter.drawPixmap(int(icon_x + 2), int(icon_y + 2), int(icon_size - 4), int(icon_size - 4), item.system_icon)
-                    else:
+                    # Smooth hover glow card background
+                    if item_anim > 0.005:
+                        painter.save()
+                        card_bg_rect = item_full_rect.adjusted(-4.0, -4.0, 4.0, 4.0)
+                        painter.setBrush(QBrush(QColor(56, 189, 248, int(20 * item_anim))))
+                        painter.setPen(QPen(QColor(56, 189, 248, int(70 * item_anim)), 0.8))
+                        painter.drawRoundedRect(card_bg_rect, 10.0, 10.0)
+                        painter.restore()
+
+                    # Detect if hovered
+                    is_hovered = (self.hovered_btn == f"vault_card:{item.id}" or
+                                  (self.hovered_btn and self.hovered_btn.endswith(f":{item.id}")))
+
+                    # 1. FULL Icon rendering (Real system shell icon, image thumbnail, zip zipper, or folder)
+                    if item.thumbnail and not item.thumbnail.isNull():
+                        thumb_path = QPainterPath()
+                        thumb_path.addRoundedRect(icon_rect, 13.0, 13.0)
+                        painter.save()
+                        painter.setClipPath(thumb_path)
+                        painter.drawPixmap(int(icon_x), int(icon_y), int(icon_size), int(icon_size), item.thumbnail)
+                        painter.restore()
+                        painter.setPen(QPen(QColor(255, 255, 255, 35), 0.8))
+                        painter.setBrush(Qt.BrushStyle.NoBrush)
+                        painter.drawRoundedRect(icon_rect, 13.0, 13.0)
+                    elif getattr(item, "is_dir", False) or item.category == "folder":
+                        if getattr(item, "system_icon", None) and not item.system_icon.isNull():
+                            painter.drawPixmap(int(icon_x + 2), int(icon_y + 2), int(icon_size - 4), int(icon_size - 4), item.system_icon)
+                        else:
+                            grad = QLinearGradient(icon_x, icon_y, icon_x, icon_y + icon_size)
+                            grad.setColorAt(0.0, QColor("#FBBF24"))
+                            grad.setColorAt(1.0, QColor("#D97706"))
+                            painter.setBrush(QBrush(grad))
+                            painter.setPen(QPen(QColor(255, 255, 255, 50), 0.8))
+                            painter.drawRoundedRect(icon_rect, 13.0, 13.0)
+                    elif item.ext in ('.zip', '.rar', '.7z', '.tar', '.gz') or item.category == "archive":
                         grad = QLinearGradient(icon_x, icon_y, icon_x, icon_y + icon_size)
-                        grad.setColorAt(0.0, QColor("#FBBF24"))
-                        grad.setColorAt(1.0, QColor("#D97706"))
+                        grad.setColorAt(0.0, QColor("#F59E0B"))
+                        grad.setColorAt(1.0, QColor("#B45309"))
                         painter.setBrush(QBrush(grad))
                         painter.setPen(QPen(QColor(255, 255, 255, 50), 0.8))
                         painter.drawRoundedRect(icon_rect, 13.0, 13.0)
-                elif item.ext in ('.zip', '.rar', '.7z', '.tar', '.gz') or item.category == "archive":
-                    grad = QLinearGradient(icon_x, icon_y, icon_x, icon_y + icon_size)
-                    grad.setColorAt(0.0, QColor("#F59E0B"))
-                    grad.setColorAt(1.0, QColor("#B45309"))
-                    painter.setBrush(QBrush(grad))
-                    painter.setPen(QPen(QColor(255, 255, 255, 50), 0.8))
-                    painter.drawRoundedRect(icon_rect, 13.0, 13.0)
 
-                    cx = icon_rect.center().x()
-                    painter.setPen(QPen(QColor(0, 0, 0, 70), 2.0))
-                    painter.drawLine(QPointF(cx, icon_y + 7.0), QPointF(cx, icon_y + icon_size - 16.0))
+                        cx = icon_rect.center().x()
+                        painter.setPen(QPen(QColor(0, 0, 0, 70), 2.0))
+                        painter.drawLine(QPointF(cx, icon_y + 7.0), QPointF(cx, icon_y + icon_size - 16.0))
 
-                    painter.setPen(QPen(QColor(255, 255, 255, 180), 1.6))
-                    for zy in range(int(icon_y + 9.0), int(icon_y + icon_size - 17.0), 5):
-                        painter.drawLine(QPointF(cx - 3.0, zy), QPointF(cx + 3.0, zy))
+                        painter.setPen(QPen(QColor(255, 255, 255, 180), 1.6))
+                        for zy in range(int(icon_y + 9.0), int(icon_y + icon_size - 17.0), 5):
+                            painter.drawLine(QPointF(cx - 3.0, zy), QPointF(cx + 3.0, zy))
 
-                    slider_y = icon_y + 23.0
-                    painter.setBrush(QBrush(QColor("#FDE68A")))
-                    painter.setPen(QPen(QColor("#78350F"), 0.8))
-                    painter.drawRoundedRect(QRectF(cx - 4.5, slider_y, 9.0, 10.0), 2.0, 2.0)
+                        slider_y = icon_y + 23.0
+                        painter.setBrush(QBrush(QColor("#FDE68A")))
+                        painter.setPen(QPen(QColor("#78350F"), 0.8))
+                        painter.drawRoundedRect(QRectF(cx - 4.5, slider_y, 9.0, 10.0), 2.0, 2.0)
 
-                    painter.setFont(_font("Segoe UI", 7.5, QFont.Weight.Bold))
-                    painter.setPen(QColor("#FFFFFF"))
-                    painter.drawText(QRectF(icon_x, icon_y + icon_size - 16.0, icon_size, 13.0), Qt.AlignmentFlag.AlignCenter, "ZIP")
-                elif getattr(item, "system_icon", None) and not item.system_icon.isNull():
-                    painter.drawPixmap(int(icon_x + 2), int(icon_y + 2), int(icon_size - 4), int(icon_size - 4), item.system_icon)
-                else:
-                    c = cat_colors.get(item.category, QColor("#94A3B8"))
-                    painter.setBrush(QBrush(QColor(c.red(), c.green(), c.blue(), 30)))
-                    painter.setPen(QPen(QColor(c.red(), c.green(), c.blue(), 110), 1.0))
-                    painter.drawRoundedRect(icon_rect, 13.0, 13.0)
+                        painter.setFont(_font("Segoe UI", 7.5, QFont.Weight.Bold))
+                        painter.setPen(QColor("#FFFFFF"))
+                        painter.drawText(QRectF(icon_x, icon_y + icon_size - 16.0, icon_size, 13.0), Qt.AlignmentFlag.AlignCenter, "ZIP")
+                    elif getattr(item, "system_icon", None) and not item.system_icon.isNull():
+                        painter.drawPixmap(int(icon_x + 2), int(icon_y + 2), int(icon_size - 4), int(icon_size - 4), item.system_icon)
+                    else:
+                        c = cat_colors.get(item.category, QColor("#94A3B8"))
+                        painter.setBrush(QBrush(QColor(c.red(), c.green(), c.blue(), 30)))
+                        painter.setPen(QPen(QColor(c.red(), c.green(), c.blue(), 110), 1.0))
+                        painter.drawRoundedRect(icon_rect, 13.0, 13.0)
 
-                    painter.setFont(_font("Segoe UI", 13.0, QFont.Weight.Bold))
-                    painter.setPen(c)
-                    ext_tag = item.ext.replace(".", "").upper()[:4] or "FILE"
-                    painter.drawText(icon_rect, Qt.AlignmentFlag.AlignCenter, ext_tag)
+                        painter.setFont(_font("Segoe UI", 13.0, QFont.Weight.Bold))
+                        painter.setPen(c)
+                        ext_tag = item.ext.replace(".", "").upper()[:4] or "FILE"
+                        painter.drawText(icon_rect, Qt.AlignmentFlag.AlignCenter, ext_tag)
 
-                # 2. Bottom Area: Name+Size OR Transformed 3 Icon Buttons
-                btn_w = 22.0
-                btn_h = 22.0
-                btn_gap = 4.0
-                total_bw = (btn_w * 3.0) + (btn_gap * 2.0)
-                btn_start_x = ix + (item_w - total_bw) / 2.0
-                btn_y = bottom_y + 4.0
+                    # 2. Bottom Area: Name+Size OR Transformed 3 Icon Buttons
+                    btn_w = 22.0
+                    btn_h = 22.0
+                    btn_gap = 4.0
+                    total_bw = (btn_w * 3.0) + (btn_gap * 2.0)
+                    btn_start_x = ix + (item_w - total_bw) / 2.0
+                    btn_y = bottom_y + 4.0
 
-                btn_cut_rect = QRectF(btn_start_x, btn_y, btn_w, btn_h)
-                btn_qr_rect = QRectF(btn_start_x + btn_w + btn_gap, btn_y, btn_w, btn_h)
-                btn_del_rect = QRectF(btn_start_x + (btn_w + btn_gap) * 2.0, btn_y, btn_w, btn_h)
+                    btn_cut_rect = QRectF(btn_start_x, btn_y, btn_w, btn_h)
+                    btn_qr_rect = QRectF(btn_start_x + btn_w + btn_gap, btn_y, btn_w, btn_h)
+                    btn_del_rect = QRectF(btn_start_x + (btn_w + btn_gap) * 2.0, btn_y, btn_w, btn_h)
 
-                if not is_hovered:
-                    # Unhovered: Name and Size
-                    painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.DemiBold))
-                    painter.setPen(QColor("#FFFFFF"))
-                    elided_name = QFontMetricsF(painter.font()).elidedText(item.name, Qt.TextElideMode.ElideMiddle, item_w)
-                    painter.drawText(QRectF(ix, bottom_y + 1.0, item_w, 14.0), Qt.AlignmentFlag.AlignCenter, elided_name)
+                    if not is_hovered:
+                        # Unhovered: Name and Size
+                        painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.DemiBold))
+                        painter.setPen(QColor("#FFFFFF"))
+                        elided_name = QFontMetricsF(painter.font()).elidedText(item.name, Qt.TextElideMode.ElideMiddle, item_w)
+                        painter.drawText(QRectF(ix, bottom_y + 1.0, item_w, 14.0), Qt.AlignmentFlag.AlignCenter, elided_name)
 
-                    painter.setFont(_font("Segoe UI", 6.2, QFont.Weight.Normal))
-                    painter.setPen(QColor("#94A3B8"))
-                    painter.drawText(QRectF(ix, bottom_y + 16.0, item_w, 12.0), Qt.AlignmentFlag.AlignCenter, item.size_str)
-                else:
-                    # Hovered: Transforms into 3 micro buttons [ ✂ ] [ 📱 ] [ ✕ ]
-                    bar_rect = QRectF(btn_start_x - 3.0, btn_y - 2.0, total_bw + 6.0, btn_h + 4.0)
-                    painter.setBrush(QBrush(QColor(15, 23, 42, 235)))
-                    painter.setPen(QPen(QColor(56, 189, 248, 100), 0.8))
-                    painter.drawRoundedRect(bar_rect, 6.0, 6.0)
+                        painter.setFont(_font("Segoe UI", 6.2, QFont.Weight.Normal))
+                        painter.setPen(QColor("#94A3B8"))
+                        painter.drawText(QRectF(ix, bottom_y + 16.0, item_w, 12.0), Qt.AlignmentFlag.AlignCenter, item.size_str)
+                    else:
+                        # Hovered: Transforms into 3 micro buttons [ ✂ ] [ 📱 ] [ ✕ ] with frosted transparent glass
+                        bar_rect = QRectF(btn_start_x - 3.0, btn_y - 2.0, total_bw + 6.0, btn_h + 4.0)
+                        painter.setBrush(QBrush(QColor(255, 255, 255, 24)))
+                        painter.setPen(QPen(QColor(255, 255, 255, 45), 0.8))
+                        painter.drawRoundedRect(bar_rect, 7.0, 7.0)
 
-                    # 1. CUT [ ✂ ]
-                    cut_hvd = self.hovered_btn == f"vault_cut:{item.id}"
-                    painter.setBrush(QBrush(QColor(255, 255, 255, 28 if cut_hvd else 18)))
-                    painter.setPen(QPen(QColor(255, 255, 255, 45 if cut_hvd else 28), 0.6))
-                    painter.drawRoundedRect(btn_cut_rect, 4.0, 4.0)
-                    painter.setFont(_font("Segoe UI Emoji", 8.0))
-                    painter.setPen(QColor("#FFFFFF" if cut_hvd else "#CBD5E1"))
-                    painter.drawText(btn_cut_rect, Qt.AlignmentFlag.AlignCenter, "✂")
+                        # 1. CUT [ ✂ ]
+                        cut_hvd = self.hovered_btn == f"vault_cut:{item.id}"
+                        painter.setBrush(QBrush(QColor(255, 255, 255, 35 if cut_hvd else 16)))
+                        painter.setPen(QPen(QColor(255, 255, 255, 55 if cut_hvd else 24), 0.6))
+                        painter.drawRoundedRect(btn_cut_rect, 5.0, 5.0)
+                        painter.setFont(_font("Segoe UI Emoji", 8.0))
+                        painter.setPen(QColor("#FFFFFF" if cut_hvd else "#CBD5E1"))
+                        painter.drawText(btn_cut_rect, Qt.AlignmentFlag.AlignCenter, "✂")
 
-                    # 2. QR [ 📱 ]
-                    qr_hvd = self.hovered_btn == f"vault_qr:{item.id}"
-                    painter.setBrush(QBrush(QColor(56, 189, 248, 55 if qr_hvd else 35)))
-                    painter.setPen(QPen(QColor(56, 189, 248, 160 if qr_hvd else 110), 0.6))
-                    painter.drawRoundedRect(btn_qr_rect, 4.0, 4.0)
-                    painter.setFont(_font("Segoe UI Emoji", 7.5))
-                    painter.setPen(QColor("#38BDF8"))
-                    painter.drawText(btn_qr_rect, Qt.AlignmentFlag.AlignCenter, "📱")
+                        # 2. QR Code Vector Icon
+                        qr_hvd = self.hovered_btn == f"vault_qr:{item.id}"
+                        painter.setBrush(QBrush(QColor(56, 189, 248, 55 if qr_hvd else 22)))
+                        painter.setPen(QPen(QColor(56, 189, 248, 160 if qr_hvd else 70), 0.6))
+                        painter.drawRoundedRect(btn_qr_rect, 5.0, 5.0)
 
-                    # 3. Hapus [ ✕ ]
-                    del_hvd = self.hovered_btn == f"vault_remove:{item.id}"
-                    painter.setBrush(QBrush(QColor(239, 68, 68, 45 if del_hvd else 25)))
-                    painter.setPen(QPen(QColor(239, 68, 68, 140 if del_hvd else 90), 0.6))
-                    painter.drawRoundedRect(btn_del_rect, 4.0, 4.0)
-                    painter.setFont(_font("Segoe UI", 8.0, QFont.Weight.Bold))
-                    painter.setPen(QColor("#F87171" if del_hvd else "#EF4444"))
-                    painter.drawText(btn_del_rect, Qt.AlignmentFlag.AlignCenter, "✕")
+                        # Clean vector QR Code icon (3 corner finders + data pixels)
+                        qr_col = QColor("#38BDF8" if qr_hvd else "#7DD3FC")
+                        qcx = btn_qr_rect.center().x()
+                        qcy = btn_qr_rect.center().y()
+                        qx0 = qcx - 5.5
+                        qy0 = qcy - 5.5
 
-                # Record hitboxes
-                self.vault_item_rects.append((item.id, item_full_rect, btn_cut_rect, btn_qr_rect, btn_del_rect, is_hovered))
+                        painter.setPen(QPen(qr_col, 0.9))
+                        painter.setBrush(Qt.BrushStyle.NoBrush)
+                        painter.drawRect(QRectF(qx0, qy0, 4.0, 4.0))
+                        painter.drawRect(QRectF(qx0 + 7.0, qy0, 4.0, 4.0))
+                        painter.drawRect(QRectF(qx0, qy0 + 7.0, 4.0, 4.0))
+
+                        painter.setPen(Qt.PenStyle.NoPen)
+                        painter.setBrush(QBrush(qr_col))
+                        painter.drawRect(QRectF(qx0 + 1.2, qy0 + 1.2, 1.6, 1.6))
+                        painter.drawRect(QRectF(qx0 + 8.2, qy0 + 1.2, 1.6, 1.6))
+                        painter.drawRect(QRectF(qx0 + 1.2, qy0 + 8.2, 1.6, 1.6))
+                        painter.drawRect(QRectF(qx0 + 7.0, qy0 + 7.0, 1.8, 1.8))
+                        painter.drawRect(QRectF(qx0 + 9.4, qy0 + 7.0, 1.6, 1.6))
+                        painter.drawRect(QRectF(qx0 + 7.0, qy0 + 9.4, 1.6, 1.6))
+                        painter.drawRect(QRectF(qx0 + 9.4, qy0 + 9.4, 1.6, 1.6))
+
+                        # 3. Hapus [ ✕ ]
+                        del_hvd = self.hovered_btn == f"vault_remove:{item.id}"
+                        painter.setBrush(QBrush(QColor(239, 68, 68, 55 if del_hvd else 22)))
+                        painter.setPen(QPen(QColor(239, 68, 68, 160 if del_hvd else 70), 0.6))
+                        painter.drawRoundedRect(btn_del_rect, 5.0, 5.0)
+                        painter.setFont(_font("Segoe UI", 8.0, QFont.Weight.Bold))
+                        painter.setPen(QColor("#F87171" if del_hvd else "#EF4444"))
+                        painter.drawText(btn_del_rect, Qt.AlignmentFlag.AlignCenter, "✕")
+
+                    # Record hitboxes
+                    if getattr(self, "vault_qr_modal_anim", 0.0) < 0.5:
+                        self.vault_item_rects.append((item.id, item_full_rect, btn_cut_rect, btn_qr_rect, btn_del_rect, is_hovered))
+
+                painter.restore()
 
             painter.restore()
 
-            # 3. Thin Horizontal Scroll Indicator (appears when > 4 items)
-            if total_items > 4:
-                track_w = 140.0
-                track_h = 3.0
-                track_x = (self.cur_w - track_w) / 2.0 + expanded_x
-                track_y = 142.0
+        # 2. RENDER QR TELEPORT MODAL OVERLAY (Smooth scale & fade in/out)
+        modal_qr = getattr(modal_item, "teleport_qr", None) or getattr(self, "vault_qr_closing_qr", None)
+        if modal_anim > 0.005 and modal_item and modal_qr:
+            painter.save()
+            modal_rect = QRectF(content_x, 34.0, content_w, 108.0)
 
-                # Track background
-                painter.setBrush(QBrush(QColor(255, 255, 255, 18)))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawRoundedRect(QRectF(track_x, track_y, track_w, track_h), 1.5, 1.5)
+            # Apple spring scale (0.92 -> 1.0) centered on modal
+            painter.translate(modal_rect.center())
+            scale_f = 0.92 + (0.08 * modal_anim)
+            painter.scale(scale_f, scale_f)
+            painter.translate(-modal_rect.center())
+            painter.setOpacity(painter.opacity() * modal_anim)
 
-                # Active thumb pill
-                visible_ratio = min(1.0, content_w / total_w)
-                thumb_w = max(24.0, track_w * visible_ratio)
-                scroll_ratio = min(1.0, max(0.0, self.vault_scroll_x / max_scroll)) if max_scroll > 0.0 else 0.0
-                thumb_x = track_x + (scroll_ratio * (track_w - thumb_w))
+            # Frosted glass background card
+            painter.setBrush(QBrush(QColor(255, 255, 255, 14)))
+            painter.setPen(QPen(QColor(255, 255, 255, 38), 0.8))
+            painter.drawRoundedRect(modal_rect, 14.0, 14.0)
 
-                painter.setBrush(QBrush(QColor("#38BDF8")))
-                painter.drawRoundedRect(QRectF(thumb_x, track_y, thumb_w, track_h), 1.5, 1.5)
+            # Close Button [ ✕ ] in top-right corner
+            btn_size = 20.0
+            close_btn_rect = QRectF(modal_rect.right() - btn_size - 10.0, modal_rect.top() + 10.0, btn_size, btn_size)
+            if modal_anim > 0.5 and active_item:
+                self.btn_vault_qr_close_rect = close_btn_rect
+
+            close_h_val = self.btn_hover_anim.get("vault_qr_close", 0.0)
+            close_bg_a = int(12 + (20 * close_h_val))
+            close_border_a = int(24 + (35 * close_h_val))
+            painter.setBrush(QBrush(QColor(255, 255, 255, close_bg_a)))
+            painter.setPen(QPen(QColor(255, 255, 255, close_border_a), 0.6))
+            painter.drawRoundedRect(close_btn_rect, 5.0, 5.0)
+
+            painter.setFont(_font("Segoe UI", 9.0, QFont.Weight.Bold))
+            painter.setPen(QColor(_interpolate_color(QColor("#94A3B8"), QColor("#FFFFFF"), close_h_val)))
+            painter.drawText(close_btn_rect, Qt.AlignmentFlag.AlignCenter, "✕")
+
+            # High-contrast crisp QR Pixmap
+            qr_size = 80.0
+            qr_x = modal_rect.left() + 16.0
+            qr_y = modal_rect.center().y() - (qr_size / 2.0)
+            qr_rect = QRectF(qr_x, qr_y, qr_size, qr_size)
+
+            painter.setBrush(QBrush(QColor("#FFFFFF")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(qr_rect.adjusted(-4.0, -4.0, 4.0, 4.0), 8.0, 8.0)
+            painter.drawPixmap(qr_rect.toRect(), modal_qr)
+
+            # Text Info Block (Vertically centered with QR code)
+            info_x = qr_rect.right() + 16.0
+            info_w = max(40.0, close_btn_rect.left() - info_x - 8.0)
+            info_y = qr_y + 1.0
+
+            # Line 1: Badge + Subtitle
+            painter.setFont(_font("Segoe UI", 6.8, QFont.Weight.Bold))
+            painter.setPen(QColor("#38BDF8"))
+            painter.drawText(QRectF(info_x, info_y, info_w, 13.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "⚡ TELEPORT KE HP")
+
+            # Line 2: File Name
+            painter.setFont(_font("Segoe UI", 9.6, QFont.Weight.Bold))
+            painter.setPen(QColor("#FFFFFF"))
+            elided_fname = QFontMetricsF(painter.font()).elidedText(modal_item.name, Qt.TextElideMode.ElideMiddle, info_w)
+            painter.drawText(QRectF(info_x, info_y + 16.0, info_w, 18.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_fname)
+
+            # Line 3: File Size
+            painter.setFont(_font("Segoe UI", 7.2, QFont.Weight.Normal))
+            painter.setPen(QColor("#94A3B8"))
+            painter.drawText(QRectF(info_x, info_y + 36.0, info_w, 14.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, f"Ukuran: {modal_item.size_str}")
+
+            # Line 4: Helper hint
+            painter.setFont(_font("Segoe UI", 7.0, QFont.Weight.Normal))
+            painter.setPen(QColor("#64748B"))
+            painter.drawText(QRectF(info_x, info_y + 54.0, info_w, 14.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "Scan dengan kamera HP dalam 1 WiFi")
+
+            painter.restore()
 
         painter.restore()
 
@@ -5102,7 +5336,7 @@ class DesktopDynamicIsland(QWidget):
             media_divider_x = media_left + media_w_area + 14.0
             # Smoothly anchored: when closed sits 14px from right notch edge; when lyrics open sits locked at media right boundary (in red box, never in lyrics layout)
             closed_nav_x = (x + w - 2.0 - btn_hit_w)
-            open_nav_x = (media_left + media_w_area) - (btn_hit_w / 2.0) - 10.0
+            open_nav_x = (media_left + media_w_area) - (btn_hit_w / 2.0) + 4.0
             next_nav_x = (1.0 - lp) * closed_nav_x + lp * open_nav_x
             self.btn_tab_next_rect = QRectF(next_nav_x, btn_y, btn_hit_w, btn_hit_h)
 

@@ -2,21 +2,6 @@
 setlocal
 cd /d "%~dp0"
 
-if exist "SysNotch.exe" (
-    start "SysNotch" "SysNotch.exe"
-    exit /b 0
-)
-
-if exist "dist\SysNotch.exe" (
-    start "SysNotch" "dist\SysNotch.exe"
-    exit /b 0
-)
-
-if exist "dist\SysNotch\SysNotch.exe" (
-    start "SysNotch" "dist\SysNotch\SysNotch.exe"
-    exit /b 0
-)
-
 if not exist ".venv\Scripts\python.exe" (
     call install.bat
     if errorlevel 1 exit /b 1
@@ -34,5 +19,3 @@ if errorlevel 1 (
 )
 
 start "SysNotch" ".venv\Scripts\pythonw.exe" "%~dp0dynamic.py"
-
-
